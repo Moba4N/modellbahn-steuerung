@@ -2,6 +2,8 @@ package de.moba.desktop
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.unit.Density
 import de.moba.adapters.catalog.StationCatalog
 import de.moba.adapters.simulator.SimulatorStation
@@ -85,15 +87,30 @@ class ScreenshotTest {
                 MobaShell(app, listOf(DrivingScreen), listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
             }
             render("handy-uebersicht-$suffix", 824, 1780, 2f) { MobaShell(app, listOf(DrivingScreen), listOf(DrivingPanel)) }
+            // Auswahlmenue der Zentralen aufgeklappt (Klick auf das Feld "Digitalzentrale")
+            render("pc-zentrale-menue-$suffix", 1440, 900, 1f, click = Offset(330f, 222f)) {
+                MobaShell(app, listOf(DrivingScreen), listOf(DrivingPanel))
+            }
         }
         scope.cancel()
         assertTrue(File(outDir, "pc-fahren-dunkel.png").length() > 0)
     }
 
-    private suspend fun render(name: String, width: Int, height: Int, density: Float, content: @androidx.compose.runtime.Composable () -> Unit) {
+    private suspend fun render(
+        name: String,
+        width: Int,
+        height: Int,
+        density: Float,
+        click: Offset? = null,
+        content: @androidx.compose.runtime.Composable () -> Unit,
+    ) {
         val scene = ImageComposeScene(width, height, Density(density), content = content)
         var time = 0L
-        repeat(10) {
+        repeat(10) { frame ->
+            if (frame == 4 && click != null) {
+                scene.sendPointerEvent(PointerEventType.Press, click)
+                scene.sendPointerEvent(PointerEventType.Release, click)
+            }
             scene.render(time)
             time += 16_000_000L
             delay(30)

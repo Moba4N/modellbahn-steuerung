@@ -2,10 +2,12 @@ package de.moba.core.station
 
 /**
  * Was der Nutzer zum Verbinden angibt: welcher Treiber, wohin, mit welchen Zusatzeinstellungen.
- * [port] null bedeutet den Standardport des Treibers.
+ * [port] null bedeutet den Standardport des Treibers. [model] ist das im Menue gewaehlte Geraet,
+ * z. B. "YaMoRC YD7001"; es dient nur der Anzeige.
  */
 data class StationConfig(
     val driverId: String,
+    val model: String? = null,
     val host: String = "",
     val port: Int? = null,
     val options: Map<String, String> = emptyMap(),
@@ -34,6 +36,9 @@ interface StationDriver {
 
     /** Welche Geraete dazu passen, z. B. "ECoS 1 und 2, Maerklin CS1 Reloaded". */
     val devices: String
+
+    /** Geraete fuer das Auswahlmenue, z. B. "Roco Z21"; ohne Angabe nur [title]. */
+    val models: List<String> get() = listOf(title)
 
     /** Braucht der Treiber eine IP-Adresse? Nur der Simulator nicht. */
     val needsHost: Boolean get() = true

@@ -23,6 +23,9 @@ object StationCatalog {
         override val id = "simulator"
         override val title = "Simulator"
         override val devices = "Ohne Hardware ausprobieren"
+        override val models = listOf(
+            "Simulator (ohne Hardware)",
+        )
         override val needsHost = false
         override fun create(config: StationConfig): CommandStation = SimulatorStation()
     }
@@ -31,15 +34,27 @@ object StationCatalog {
         override val id = "z21"
         override val title = "Z21-Protokoll"
         override val devices = "YaMoRC YD7001, Roco/Fleischmann Z21 und z21, Digikeijs DR5000"
+        override val models = listOf(
+            "YaMoRC YD7001",
+            "Roco Z21",
+            "Roco z21 / z21start",
+            "Digikeijs DR5000",
+            "Andere Zentrale mit Z21-Protokoll",
+        )
         override val defaultPort = Z21Codec.PORT
         override fun create(config: StationConfig) =
-            z21Station(config.host, name = "Z21-Zentrale (${config.host})", port = config.port ?: Z21Codec.PORT)
+            z21Station(config.host, name = "${config.model ?: "Z21-Zentrale"} (${config.host})", port = config.port ?: Z21Codec.PORT)
     }
 
     val marklinCs: StationDriver = object : StationDriver {
         override val id = "marklin-cs"
         override val title = "Märklin Central Station"
         override val devices = "Central Station 2, 3 und 3plus"
+        override val models = listOf(
+            "Märklin Central Station 2",
+            "Märklin Central Station 3",
+            "Märklin Central Station 3plus",
+        )
         override val defaultPort = CsCodec.TCP_PORT
         override val options = listOf(
             DriverOption(
@@ -50,7 +65,7 @@ object StationCatalog {
         )
 
         override fun create(config: StationConfig): CommandStation {
-            val name = "Märklin CS (${config.host})"
+            val name = "${config.model ?: "Märklin CS"} (${config.host})"
             return CsStation(
                 name = name,
                 streamFactory = { TcpByteStream.open(config.host, config.port ?: CsCodec.TCP_PORT, name) },
@@ -64,6 +79,11 @@ object StationCatalog {
         override val id = "ecos"
         override val title = "ESU ECoS"
         override val devices = "ECoS 1 und 2, Märklin CS1 Reloaded"
+        override val models = listOf(
+            "ESU ECoS 1",
+            "ESU ECoS 2",
+            "Märklin Central Station 1 Reloaded",
+        )
         override val defaultPort = EcosStation.PORT
         override val options = listOf(
             DriverOption(
@@ -74,7 +94,7 @@ object StationCatalog {
         )
 
         override fun create(config: StationConfig): CommandStation {
-            val name = "ESU ECoS (${config.host})"
+            val name = "${config.model ?: "ESU ECoS"} (${config.host})"
             return EcosStation(
                 name = name,
                 streamFactory = { TcpByteStream.open(config.host, config.port ?: EcosStation.PORT, name) },
@@ -88,6 +108,9 @@ object StationCatalog {
         override val id = "dccex"
         override val title = "DCC-EX"
         override val devices = "DCC-EX-Eigenbau mit WLAN oder Ethernet"
+        override val models = listOf(
+            "DCC-EX (WLAN oder Ethernet)",
+        )
         override val defaultPort = DccExStation.PORT
         override fun create(config: StationConfig): CommandStation {
             val name = "DCC-EX (${config.host})"
@@ -99,9 +122,14 @@ object StationCatalog {
         override val id = "xpressnet-lan"
         override val title = "Lenz XpressNet (LAN)"
         override val devices = "LZV100, LZV200 und andere XpressNet-Zentralen am LAN/USB-Interface 23151"
+        override val models = listOf(
+            "Lenz LZV100 (LAN-Interface 23151)",
+            "Lenz LZV200 (LAN-Interface 23151)",
+            "Andere XpressNet-Zentrale am Lenz-LAN-Interface",
+        )
         override val defaultPort = XpressNetCodec.PORT
         override fun create(config: StationConfig): CommandStation {
-            val name = "Lenz XpressNet (${config.host})"
+            val name = "${config.model ?: "Lenz XpressNet"} (${config.host})"
             return XpressNetStation(name, { TcpByteStream.open(config.host, config.port ?: XpressNetCodec.PORT, name) })
         }
     }

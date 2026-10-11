@@ -120,6 +120,7 @@ class MobaApp(
             if (driver.needsHost && host.isBlank()) return StationConfig(drivers.first().id)
             return StationConfig(
                 driverId = driver.id,
+                model = settings.get(KEY_MODEL)?.takeIf { it in driver.models },
                 host = if (driver.needsHost) host else "",
                 port = settings.get(KEY_PORT)?.toIntOrNull(),
                 options = driver.options.associate { it.key to (settings.get("$KEY_OPTION${it.key}") ?: it.default) },
@@ -145,6 +146,7 @@ class MobaApp(
                 return@withLock
             }
             settings.set(KEY_TYPE, driver.id)
+            settings.set(KEY_MODEL, config.model.orEmpty())
             if (driver.needsHost) {
                 settings.set(KEY_HOST, config.host)
                 settings.set(KEY_PORT, config.port?.toString().orEmpty())
@@ -212,6 +214,7 @@ class MobaApp(
         const val KEY_TYPE = "station.type"
         const val KEY_HOST = "station.host"
         const val KEY_PORT = "station.port"
+        const val KEY_MODEL = "station.model"
         const val KEY_OPTION = "station.option."
         const val KEY_THEME = "ui.theme"
         const val LOG_SIZE = 30

@@ -56,7 +56,7 @@ und der Nothalt ist nie lizenzpflichtig.
 
 ## Z21-Zentrale verbinden (YaMoRC YD7001)
 
-In der App unter Uebersicht > Zentrale "Z21-Protokoll" waehlen, die IP-Adresse der Zentrale eintragen und
+In der App unter Uebersicht > Zentrale im Menue "Digitalzentrale" die YaMoRC YD7001 waehlen, die IP-Adresse eintragen und
 "Verbinden" druecken. Die App merkt sich die Auswahl. Unter "Meldungen der Zentrale" erscheinen
 Gleisspannung, Nothalt, Weichen und Belegtmelder.
 
