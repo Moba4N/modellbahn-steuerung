@@ -3,9 +3,12 @@ package de.moba.desktop
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
+import de.moba.adapters.catalog.StationCatalog
 import de.moba.adapters.simulator.SimulatorStation
 import de.moba.core.model.Loco
 import de.moba.core.station.Direction
+import de.moba.core.station.StationConfig
+import de.moba.core.station.StationDriver
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.driving.api.DrivingService
 import de.moba.modules.driving.ui.DrivingPanel
@@ -13,7 +16,6 @@ import de.moba.modules.driving.ui.DrivingScreen
 import de.moba.modules.driving.ui.DrivingUiState
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
-import de.moba.ui.shell.StationConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,15 +35,19 @@ import kotlin.test.assertTrue
 class ScreenshotTest {
     private val outDir = File(System.getProperty("screenshots.dir") ?: "build/screenshots")
 
+    private val namedSimulator = object : StationDriver by StationCatalog.simulator {
+        override fun create(config: StationConfig) = SimulatorStation(name = "YaMoRC YD7001 (Simulator)")
+    }
+
     @Test
     fun renderScreens() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val app = MobaApp(
             scope = scope,
-            stationFactory = { SimulatorStation(name = "YaMoRC YD7001 (Simulator)") },
+            drivers = listOf(namedSimulator) + StationCatalog.drivers.filter { it.id != "simulator" },
             moduleFactory = { listOf(DrivingModule()) },
         )
-        app.connect(StationConfig.Simulator).join()
+        app.connect(StationConfig("simulator")).join()
         val session = app.session.value!!
         val sim = session.station as SimulatorStation
         app.layout.update {

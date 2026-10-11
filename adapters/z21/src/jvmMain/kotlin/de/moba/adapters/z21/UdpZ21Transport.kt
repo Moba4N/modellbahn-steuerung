@@ -30,5 +30,5 @@ class UdpZ21Transport(
 }
 
 /** Z21-Zentrale unter [host] per UDP, z. B. `z21Station("192.168.0.111", "YaMoRC YD7001")`. */
-fun z21Station(host: String, name: String = "Z21-Zentrale ($host)") =
-    Z21Station(name = name, transportFactory = { UdpZ21Transport(host) })
+fun z21Station(host: String, name: String = "Z21-Zentrale ($host)", port: Int = Z21Codec.PORT) =
+    Z21Station(name = name, transportFactory = { UdpZ21Transport(host, port) })
