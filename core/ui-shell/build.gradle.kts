@@ -18,9 +18,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:runtime"))
+            implementation(libs.kotlinx.datetime)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation(compose.materialIconsExtended)
         }
     }
 }

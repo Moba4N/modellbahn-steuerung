@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /** Welche Zentrale die App ansteuert. */
 sealed interface StationConfig {
@@ -34,6 +37,12 @@ interface SettingsStore {
         }
     }
 }
+
+/** Art einer Meldung; bestimmt Farbe und Symbol in der Liste. */
+enum class LogKind { INFO, OCCUPIED, FREE, ALARM }
+
+/** Eine Meldung der Zentrale mit Uhrzeit (HH:MM:SS). */
+data class LogEntry(val time: String, val text: String, val kind: LogKind)
 
 /** Eine Verbindung zu einer Zentrale mit den dafuer gestarteten Modulen. */
 class Session(val config: StationConfig, val station: CommandStation, val host: ModuleHost)
@@ -64,8 +73,16 @@ class MobaApp(
     val error: StateFlow<String?> = _error
 
     /** Die letzten Meldungen der Zentrale, neueste zuerst. Zeigt z. B., ob s88-Melder ankommen. */
-    private val _log = MutableStateFlow<List<String>>(emptyList())
-    val log: StateFlow<List<String>> = _log
+    private val _log = MutableStateFlow<List<LogEntry>>(emptyList())
+    val log: StateFlow<List<LogEntry>> = _log
+
+    private val _darkTheme = MutableStateFlow(settings.get(KEY_THEME) != "light")
+    val darkTheme: StateFlow<Boolean> = _darkTheme
+
+    fun setDarkTheme(dark: Boolean) {
+        _darkTheme.value = dark
+        settings.set(KEY_THEME, if (dark) "dark" else "light")
+    }
 
     private val switching = Mutex()
     private var eventJob: Job? = null
@@ -125,27 +142,37 @@ class MobaApp(
     }
 
     private fun onStationEvent(event: StationEvent) {
-        val text = when (event) {
+        val (text, kind) = when (event) {
             is StationEvent.ConnectionChanged -> {
                 _connected.value = event.connected
-                if (event.connected) "Verbunden" else "Verbindung getrennt"
+                if (event.connected) "Verbunden mit ${_session.value?.station?.name}" to LogKind.INFO
+                else "Verbindung getrennt" to LogKind.ALARM
             }
             is StationEvent.TrackPowerChanged -> {
                 _trackPower.value = event.on
-                if (event.on) "Gleisspannung an" else "Gleisspannung aus"
+                if (event.on) "Gleisspannung an" to LogKind.INFO else "Gleisspannung aus" to LogKind.ALARM
             }
-            StationEvent.EmergencyStopped -> "Nothalt"
+            StationEvent.EmergencyStopped -> "Nothalt" to LogKind.ALARM
             is StationEvent.FeedbackChanged ->
-                "s88 Modul ${event.module}, Kontakt ${event.contact}: ${if (event.occupied) "belegt" else "frei"}"
-            is StationEvent.TurnoutChanged -> "Weiche ${event.address}: ${if (event.thrown) "abzweigend" else "gerade"}"
-            is StationEvent.LocoChanged -> null // zu haeufig fuer die Liste
-        } ?: return
-        _log.update { (listOf(text) + it).take(LOG_SIZE) }
+                "s88 ${event.module}.${event.contact} ${if (event.occupied) "belegt" else "frei"}" to
+                    if (event.occupied) LogKind.OCCUPIED else LogKind.FREE
+            is StationEvent.TurnoutChanged ->
+                "Weiche ${event.address} ${if (event.thrown) "abzweigend" else "gerade"}" to LogKind.INFO
+            is StationEvent.LocoChanged -> return // zu haeufig fuer die Liste
+        }
+        _log.update { (listOf(LogEntry(now(), text, kind)) + it).take(LOG_SIZE) }
+    }
+
+    private fun now(): String {
+        val t = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        fun two(n: Int) = n.toString().padStart(2, '0')
+        return "${two(t.hour)}:${two(t.minute)}:${two(t.second)}"
     }
 
     private companion object {
         const val KEY_TYPE = "station.type"
         const val KEY_HOST = "station.host"
+        const val KEY_THEME = "ui.theme"
         const val LOG_SIZE = 30
     }
 }

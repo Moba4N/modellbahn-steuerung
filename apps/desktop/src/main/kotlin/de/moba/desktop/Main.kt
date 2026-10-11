@@ -9,6 +9,7 @@ import androidx.compose.ui.window.rememberWindowState
 import de.moba.adapters.simulator.SimulatorStation
 import de.moba.adapters.z21.z21Station
 import de.moba.modules.driving.DrivingModule
+import de.moba.modules.driving.ui.DrivingPanel
 import de.moba.modules.driving.ui.DrivingScreen
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
@@ -27,7 +28,7 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "Modellbahn-Steuerung",
-        state = rememberWindowState(width = 900.dp, height = 800.dp),
+        state = rememberWindowState(width = 1360.dp, height = 860.dp),
     ) {
         val scope = rememberCoroutineScope()
         val app = remember {
@@ -43,6 +44,6 @@ fun main() = application {
                 settings = DesktopSettings,
             ).also { it.start() }
         }
-        MobaShell(app, screens = listOf(DrivingScreen))
+        MobaShell(app, screens = listOf(DrivingScreen), panels = listOf(DrivingPanel))
     }
 }
