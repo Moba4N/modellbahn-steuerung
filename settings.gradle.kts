@@ -21,6 +21,9 @@ include(
     ":core:station-api",
     ":core:runtime",
     ":adapters:simulator",
+    ":adapters:z21",
+    ":modules:driving:api",
+    ":modules:driving:impl",
     ":tools:sandbox",
 )
 
@@ -29,6 +32,7 @@ include(
 if (providers.gradleProperty("moba.apps").getOrElse("true").toBoolean()) {
     include(
         ":core:ui-shell",
+        ":modules:driving:ui",
         ":apps:desktop",
         ":apps:android",
     )

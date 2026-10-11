@@ -18,6 +18,10 @@ kotlin {
 
 dependencies {
     implementation(project(":core:ui-shell"))
+    implementation(project(":modules:driving:ui"))
+    implementation(project(":modules:driving:impl"))
+    implementation(project(":adapters:simulator"))
+    implementation(project(":adapters:z21"))
     implementation(compose.desktop.currentOs)
     implementation(libs.kotlinx.coroutines.swing)
 }

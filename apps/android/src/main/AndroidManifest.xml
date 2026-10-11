@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <application
+        android:name=".MobaApplication"
         android:label="Modellbahn-Steuerung"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity

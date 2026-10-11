@@ -22,8 +22,10 @@ import kotlinx.coroutines.runBlocking
 /**
  * Sandbox: startet Kern, Simulator und Beispielmodule ohne Oberflaeche und ohne Hardware.
  * So laesst sich ein Modul isoliert entwickeln. Aufruf: ./gradlew :tools:sandbox:run
+ * Mit --args="z21 <IP-Adresse>" stattdessen Verbindungstest mit einer echten Zentrale.
  */
-fun main() = runBlocking {
+fun main(args: Array<String>) = runBlocking {
+    if (args.size == 2 && args[0] == "z21") return@runBlocking probeZ21(args[1])
     coroutineScope {
         val sim = SimulatorStation(name = "Simulator (statt YaMoRC YD7001)")
         val layout = InMemoryLayoutRepository(
