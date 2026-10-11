@@ -1,0 +1,38 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    # Ubuntu-Runner bringen das Android SDK mit.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Bauen und testen (Kern, Simulator, Android, Desktop)
+        run: ./gradlew build
+      - name: Sandbox ausfuehren
+        run: ./gradlew :tools:sandbox:run
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Windows-Installer bauen
+        run: ./gradlew :apps:desktop:packageMsi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: apps/desktop/build/compose/binaries/main/msi/*.msi
