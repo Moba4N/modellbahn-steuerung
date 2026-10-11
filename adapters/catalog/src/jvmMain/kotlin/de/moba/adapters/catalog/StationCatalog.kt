@@ -123,9 +123,9 @@ object StationCatalog {
         override val title = "Lenz XpressNet (LAN)"
         override val devices = "LZV100, LZV200 und andere XpressNet-Zentralen am LAN/USB-Interface 23151"
         override val models = listOf(
-            "Lenz LZV100 (LAN-Interface 23151)",
-            "Lenz LZV200 (LAN-Interface 23151)",
-            "Andere XpressNet-Zentrale am Lenz-LAN-Interface",
+            "Lenz LZV100",
+            "Lenz LZV200",
+            "Andere XpressNet-Zentrale",
         )
         override val defaultPort = XpressNetCodec.PORT
         override fun create(config: StationConfig): CommandStation {

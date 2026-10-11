@@ -41,6 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import de.moba.core.station.StationConfig
@@ -188,10 +190,12 @@ private fun StationMenu(
     onSelect: (String, StationDriver) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    // Simulator zuerst, danach alphabetisch nach Geraetename.
+    var fieldWidth by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    // Simulator zuerst, dann alphabetisch nach Geraetename, "Andere ..." am Ende.
     val entries = remember(app.drivers) {
         app.drivers.flatMap { d -> d.models.map { it to d } }
-            .sortedWith(compareBy({ it.second.needsHost }, { it.first.lowercase() }))
+            .sortedWith(compareBy({ it.second.needsHost }, { it.first.startsWith("Andere") }, { it.first.lowercase() }))
     }
     Box {
         OutlinedTextField(
@@ -202,14 +206,18 @@ private fun StationMenu(
             label = { Text("Digitalzentrale") },
             supportingText = { Text(if (driver.needsHost) "Verbindung über ${driver.title}" else driver.devices) },
             trailingIcon = { Icon(if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown, null) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onGloballyPositioned { fieldWidth = it.size.width },
         )
         // Das Textfeld ist nur Anzeige; ein Klick irgendwo darauf oeffnet das Menue.
         Box(
             Modifier.matchParentSize().padding(bottom = 22.dp).clip(MaterialTheme.shapes.extraSmall)
                 .clickable { expanded = true },
         )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(with(density) { fieldWidth.toDp() }),
+        ) {
             entries.forEach { (name, d) ->
                 DropdownMenuItem(
                     text = {
