@@ -3,7 +3,8 @@
 Modulare Steuerungssoftware fuer digitale Modellbahnen, fuer Android und Windows.
 Das Architektur-Dokument beschreibt Module, Abo-Modell und Fahrplan der Entwicklung.
 
-Stand: **Phase 1**. Kern, Simulator, Z21-Adapter (z. B. YaMoRC YD7001) und das Modul "Fahren".
+Stand: **Phase 1** plus Zentralen-Paket Stufe A. Kern, Simulator, Adapter fuer Z21, Maerklin CS, ESU ECoS,
+DCC-EX und Lenz XpressNet sowie das Modul "Fahren".
 
 ## Aufbau
 
@@ -14,7 +15,13 @@ Stand: **Phase 1**. Kern, Simulator, Z21-Adapter (z. B. YaMoRC YD7001) und das M
 | `core/runtime` | Modul-Vertrag (`MobaModule`), Modul-Host, Ereignis-Bus, Lizenzpruefung |
 | `core/ui-shell` | App-Rahmen mit Gleisspannung, Nothalt und Modulliste (Compose Multiplatform) |
 | `adapters/simulator` | Virtuelle Zentrale ohne Hardware, inklusive s88-Belegtmelder |
+| `adapters/net` | Gemeinsame Basis fuer Zentralen an TCP (Verbindung, Bestaetigungen, Testhilfen) |
 | `adapters/z21` | Z21-LAN-Protokoll per UDP: YaMoRC YD7001, Roco/Fleischmann z21 und kompatible |
+| `adapters/marklin-cs` | Maerklin Central Station 2, 3 und 3plus (CAN ueber TCP) |
+| `adapters/ecos` | ESU ECoS 1 und 2, Maerklin CS1 Reloaded (ECoS-Textprotokoll) |
+| `adapters/dccex` | DCC-EX-Eigenbau ueber WLAN/LAN |
+| `adapters/xpressnet` | Lenz LZV100/LZV200 und andere XpressNet-Zentralen am LAN/USB-Interface 23151 |
+| `adapters/catalog` | Liste aller Zentralen fuer den Verbindungsdialog und Netzwerksuche |
 | `modules/driving` | Modul "Fahren": `api` (Schnittstelle), `impl` (Logik), `ui` (Fahrregler) |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
@@ -49,7 +56,7 @@ und der Nothalt ist nie lizenzpflichtig.
 
 ## Z21-Zentrale verbinden (YaMoRC YD7001)
 
-In der App unter Uebersicht > Zentrale "Z21-Protokoll" waehlen, die IP-Adresse der Zentrale eintragen und
+In der App unter Uebersicht > Zentrale im Menue "Digitalzentrale" die YaMoRC YD7001 waehlen, die IP-Adresse eintragen und
 "Verbinden" druecken. Die App merkt sich die Auswahl. Unter "Meldungen der Zentrale" erscheinen
 Gleisspannung, Nothalt, Weichen und Belegtmelder.
 
@@ -58,7 +65,32 @@ zwei R-Bus-Module (je 8 Eingaenge) in ein s88-Modul mit 16 Kontakten um. Ob das 
 ist noch an echter Hardware zu pruefen: Abschnitt belegen und schauen, ob Modul und Kontakt passen.
 LocoNet-Belegtmelder werden ebenfalls ausgewertet.
 
+## Unterstuetzte Zentralen
+
+Alle Zentralen-Adapter sind kostenlos. Getestet sind sie mit nachgebauten Zentralen in den Tests;
+an echter Hardware bisher nur die YaMoRC YD7001.
+
+| Zentrale | Treiber | Port | Im Netz suchen |
+| --- | --- | --- | --- |
+| YaMoRC YD7001, Roco/Fleischmann Z21 und z21, Digikeijs DR5000 | Z21-Protokoll | UDP 21105 | ja |
+| Maerklin Central Station 2, 3, 3plus | Maerklin Central Station | TCP 15731 | ja |
+| ESU ECoS 1 und 2, Maerklin CS1 Reloaded | ESU ECoS | TCP 15471 | nein |
+| DCC-EX (WLAN oder Ethernet) | DCC-EX | TCP 2560 | nein |
+| Lenz LZV100/LZV200 am LAN/USB-Interface 23151 | Lenz XpressNet (LAN) | TCP 5550 | nein |
+
+Hinweise:
+
+- **Maerklin CS:** Loks werden ueber Adresse und Protokoll angesprochen (Motorola, mfx oder DCC). Bei mfx
+  ist das die Adresse, die die CS fuer die Lok anzeigt. s88-Kontakte am Links88 werden fortlaufend gezaehlt.
+- **ECoS:** Faehrt die App eine Adresse, die in der ECoS nicht angelegt ist, legt sie die Lok in der ECoS an.
+  Die ECoS kennt keinen Lok-Nothalt bei eingeschaltetem Gleis; der Nothalt schaltet das Gleis ab.
+- **DCC-EX:** Weichen und Nothalt bestaetigt die DCC-EX nicht; die App meldet sie, sobald der Befehl raus ist.
+  Sensoren werden als Rueckmelder gezaehlt (Sensor 1 = Modul 1, Kontakt 1).
+- **Lenz:** Nach jedem Fahrbefehl fragt die App den Lokzustand ab. Rueckmelder (LR101, 8 Eingaenge je
+  Adresse) werden auf Module zu 16 Kontakten umgerechnet.
+
 ## Naechste Schritte
 
 - s88-Zuordnung an der YD7001 pruefen; falls noetig LocoNet-Adapter
+- Zentralen-Paket Stufe B (USB/seriell): Intellibox und Tams (P50X), Lenz LI-USB, LocoNet, Maerklin 6050
 - Phase 2: Gleisbild-Stellpult, Rueckmelder-Modul, Lokverwaltung

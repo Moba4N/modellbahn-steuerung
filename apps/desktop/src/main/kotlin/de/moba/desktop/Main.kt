@@ -6,15 +6,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import de.moba.adapters.simulator.SimulatorStation
-import de.moba.adapters.z21.z21Station
+import de.moba.adapters.catalog.StationCatalog
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.driving.ui.DrivingPanel
 import de.moba.modules.driving.ui.DrivingScreen
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.SettingsStore
-import de.moba.ui.shell.StationConfig
 import java.util.prefs.Preferences
 
 /** Einstellungen in der Windows-Registry (Java Preferences). */
@@ -34,12 +32,8 @@ fun main() = application {
         val app = remember {
             MobaApp(
                 scope = scope,
-                stationFactory = { config ->
-                    when (config) {
-                        StationConfig.Simulator -> SimulatorStation()
-                        is StationConfig.Z21 -> z21Station(config.host)
-                    }
-                },
+                drivers = StationCatalog.drivers,
+                discovery = StationCatalog.discovery,
                 moduleFactory = { listOf(DrivingModule()) },
                 settings = DesktopSettings,
             ).also { it.start() }
