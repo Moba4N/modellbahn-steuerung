@@ -1,70 +1,149 @@
 package de.moba.ui.shell
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Train
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.moba.core.runtime.ModuleState
 import de.moba.core.runtime.ModuleStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** App-Rahmen: Nothalt immer oben, darunter Uebersicht und die Ansichten der aktiven Module. */
+private const val OVERVIEW = "overview"
+
+/** true, wenn die rechte Leiste (z. B. Fahrpult) sichtbar ist. Module zeigen ihre Inhalte sonst selbst an. */
+val LocalWideLayout = compositionLocalOf { false }
+
+/** Ab dieser Breite: Seitenleiste links, Fahrpult rechts (Tablet quer, PC). Darunter: Leiste unten (Handy). */
+private val WIDE_LAYOUT = 900.dp
+
+/**
+ * App-Rahmen im Stil moderner Stellpult-Software: Statusleiste mit Nothalt oben,
+ * Navigation links (bzw. unten auf dem Handy), Ansicht in der Mitte, Fahrpult rechts.
+ */
 @Composable
-fun MobaShell(app: MobaApp, screens: List<ModuleScreen> = emptyList()) {
+fun MobaShell(
+    app: MobaApp,
+    screens: List<ModuleScreen> = emptyList(),
+    panels: List<ModulePanel> = emptyList(),
+    initialScreen: String? = null,
+) {
+    val dark by app.darkTheme.collectAsState()
     val session by app.session.collectAsState()
     val emptyStatus = remember { MutableStateFlow(emptyMap<String, ModuleStatus>()) }
     val modules by (session?.host?.status ?: emptyStatus).collectAsState()
-    val visible = screens.filter { modules[it.moduleId]?.state == ModuleState.ACTIVE }
-    var tab by remember { mutableStateOf(0) }
-    if (tab > visible.size) tab = 0
+    fun active(id: String) = modules[id]?.state == ModuleState.ACTIVE
+    val visible = screens.filter { active(it.moduleId) }
+    val activePanels = panels.filter { active(it.moduleId) }
+    var current by remember { mutableStateOf(initialScreen ?: OVERVIEW) }
+    if (current != OVERVIEW && visible.none { it.moduleId == current }) current = OVERVIEW
 
-    MaterialTheme {
-        Surface(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize()) {
-                Button(
-                    onClick = { app.emergencyStop() },
-                    modifier = Modifier.fillMaxWidth().padding(12.dp).height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
-                ) {
-                    Text("NOTHALT", style = MaterialTheme.typography.titleLarge)
-                }
-                TabRow(selectedTabIndex = tab) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Übersicht") })
-                    visible.forEachIndexed { i, screen ->
-                        Tab(selected = tab == i + 1, onClick = { tab = i + 1 }, text = { Text(screen.title) })
+    MobaTheme(dark) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val wide = maxWidth >= WIDE_LAYOUT
+                CompositionLocalProvider(LocalWideLayout provides wide) {
+                Column(Modifier.fillMaxSize()) {
+                    TopBar(app, compact = !wide)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        if (wide) {
+                            NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                                Spacer(Modifier.height(8.dp))
+                                NavigationRailItem(
+                                    selected = current == OVERVIEW,
+                                    onClick = { current = OVERVIEW },
+                                    icon = { Icon(Icons.Outlined.Dashboard, null) },
+                                    label = { Text("Übersicht") },
+                                )
+                                visible.forEach { screen ->
+                                    NavigationRailItem(
+                                        selected = current == screen.moduleId,
+                                        onClick = { current = screen.moduleId },
+                                        icon = { Icon(screen.icon, null) },
+                                        label = { Text(screen.title) },
+                                    )
+                                }
+                            }
+                            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                        Box(Modifier.weight(1f).fillMaxHeight().padding(if (wide) 24.dp else 12.dp)) {
+                            val screen = visible.firstOrNull { it.moduleId == current }
+                            if (screen == null) Overview(app, modules, wide) else screen.Content(app)
+                        }
+                        if (wide && activePanels.isNotEmpty()) {
+                            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Surface(
+                                Modifier.width(380.dp).fillMaxHeight(),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            ) {
+                                Column(Modifier.padding(20.dp)) { activePanels.forEach { it.Content(app) } }
+                            }
+                        }
+                    }
+                    if (!wide) {
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                            NavigationBarItem(
+                                selected = current == OVERVIEW,
+                                onClick = { current = OVERVIEW },
+                                icon = { Icon(Icons.Outlined.Dashboard, null) },
+                                label = { Text("Übersicht") },
+                            )
+                            visible.forEach { screen ->
+                                NavigationBarItem(
+                                    selected = current == screen.moduleId,
+                                    onClick = { current = screen.moduleId },
+                                    icon = { Icon(screen.icon, null) },
+                                    label = { Text(screen.title) },
+                                )
+                            }
+                        }
                     }
                 }
-                Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    if (tab == 0) Overview(app, modules) else visible[tab - 1].Content(app)
                 }
             }
         }
@@ -72,81 +151,71 @@ fun MobaShell(app: MobaApp, screens: List<ModuleScreen> = emptyList()) {
 }
 
 @Composable
-private fun Overview(app: MobaApp, modules: Map<String, ModuleStatus>) {
+private fun TopBar(app: MobaApp, compact: Boolean) {
     val session by app.session.collectAsState()
-    val trackPower by app.trackPower.collectAsState()
     val connected by app.connected.collectAsState()
-    val error by app.error.collectAsState()
-    val log by app.log.collectAsState()
+    val trackPower by app.trackPower.collectAsState()
+    val dark by app.darkTheme.collectAsState()
+    val colors = Moba.colors
 
-    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        StationPicker(app, initial = session?.config ?: app.savedConfig)
-
-        Text(
-            "${session?.station?.name ?: "Keine Zentrale"}: ${if (connected) "verbunden" else "nicht verbunden"}",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Gleisspannung", Modifier.weight(1f))
-            Switch(checked = trackPower, onCheckedChange = { app.setTrackPower(it) }, enabled = connected)
-        }
-
-        Text("Module", style = MaterialTheme.typography.titleMedium)
-        modules.forEach { (id, status) ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(session?.host?.module(id)?.displayName ?: id, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        when (status.state) {
-                            ModuleState.ACTIVE -> "aktiv"
-                            ModuleState.LOCKED -> "gesperrt: ${status.reason ?: "Abo noetig"}"
-                            ModuleState.FAILED -> "Fehler: ${status.reason}"
-                            ModuleState.INSTALLED -> "installiert"
-                            ModuleState.STOPPED -> "gestoppt"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Row(
+            Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Filled.Train, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+            if (!compact) {
+                Text("Modellbahn-Steuerung", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
             }
-        }
 
-        Text("Meldungen der Zentrale", style = MaterialTheme.typography.titleMedium)
-        if (log.isEmpty()) Text("Noch keine Meldungen.", style = MaterialTheme.typography.bodySmall)
-        log.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-    }
-}
-
-@Composable
-private fun StationPicker(app: MobaApp, initial: StationConfig) {
-    var useZ21 by remember(initial) { mutableStateOf(initial is StationConfig.Z21) }
-    var host by remember(initial) { mutableStateOf((initial as? StationConfig.Z21)?.host ?: "") }
-
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Zentrale", style = MaterialTheme.typography.titleMedium)
-            Row(Modifier.selectable(selected = !useZ21, onClick = { useZ21 = false }), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = !useZ21, onClick = { useZ21 = false })
-                Text("Simulator (ohne Hardware)")
-            }
-            Row(Modifier.selectable(selected = useZ21, onClick = { useZ21 = true }), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = useZ21, onClick = { useZ21 = true })
-                Text("Z21-Protokoll (z. B. YaMoRC YD7001, Roco z21)")
-            }
-            if (useZ21) {
-                OutlinedTextField(
-                    value = host,
-                    onValueChange = { host = it.trim() },
-                    label = { Text("IP-Adresse der Zentrale") },
-                    singleLine = true,
+            // Verbindung zur Zentrale
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                StatusDot(if (connected) colors.signalGreen else colors.alarm)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (connected) session?.station?.name ?: "" else "Nicht verbunden",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Button(
-                onClick = { app.connect(if (useZ21) StationConfig.Z21(host) else StationConfig.Simulator) },
-                enabled = !useZ21 || host.isNotBlank(),
+
+            // Gleisspannung
+            OutlinedButton(
+                onClick = { app.setTrackPower(!trackPower) },
+                enabled = connected,
+                border = BorderStroke(1.dp, if (trackPower) colors.signalGreen else MaterialTheme.colorScheme.outline),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = if (trackPower) colors.signalGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             ) {
-                Text("Verbinden")
+                Icon(Icons.Filled.PowerSettingsNew, null, modifier = Modifier.size(18.dp))
+                if (!compact) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (trackPower) "Gleis an" else "Gleis aus")
+                }
+            }
+
+            if (!compact) {
+                IconButton(onClick = { app.setDarkTheme(!dark) }) {
+                    Icon(if (dark) Icons.Filled.LightMode else Icons.Filled.DarkMode, "Hell/Dunkel umschalten")
+                }
+            }
+
+            // Nothalt: immer sichtbar, nie lizenzpflichtig
+            Button(
+                onClick = { app.emergencyStop() },
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.alarm, contentColor = MaterialTheme.colorScheme.onError),
+                contentPadding = ButtonDefaults.ContentPadding,
+                modifier = Modifier.height(44.dp),
+            ) {
+                Icon(Icons.Filled.Block, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("NOTHALT", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
             }
         }
     }

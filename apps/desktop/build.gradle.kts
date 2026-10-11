@@ -24,6 +24,12 @@ dependencies {
     implementation(project(":adapters:z21"))
     implementation(compose.desktop.currentOs)
     implementation(libs.kotlinx.coroutines.swing)
+    testImplementation(kotlin("test"))
+}
+
+// Der Test ScreenshotTest legt Vorschaubilder der Oberflaeche hier ab (siehe GitHub-Build).
+tasks.withType<Test>().configureEach {
+    systemProperty("screenshots.dir", layout.buildDirectory.dir("screenshots").get().asFile.absolutePath)
 }
 
 compose.desktop {
