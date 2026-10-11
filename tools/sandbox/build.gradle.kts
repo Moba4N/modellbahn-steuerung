@@ -17,6 +17,7 @@ kotlin {
 dependencies {
     implementation(project(":core:runtime"))
     implementation(project(":adapters:simulator"))
+    implementation(project(":adapters:z21"))
 }
 
 application {

@@ -49,6 +49,10 @@ class ModuleHost(
 
     fun module(id: String): MobaModule? = modules[id]
 
+    /** Dienst eines laufenden Moduls, z. B. fuer die Oberflaeche. `null`, wenn das Modul nicht laeuft. */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Any> service(type: KClass<T>): T? = services[type] as T?
+
     /** Startet alle Module in Abhaengigkeitsreihenfolge, soweit Lizenz und Abhaengigkeiten es erlauben. */
     suspend fun startAll() {
         if (forwarding == null) {
