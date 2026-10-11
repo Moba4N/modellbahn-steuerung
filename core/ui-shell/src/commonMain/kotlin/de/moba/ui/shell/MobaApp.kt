@@ -11,6 +11,7 @@ import de.moba.core.station.StationDiscovery
 import de.moba.core.station.StationDriver
 import de.moba.core.station.StationEvent
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -155,7 +156,8 @@ class MobaApp(
 
             val station = driver.create(config)
             val host = ModuleHost(station, layout, license, scope).apply { moduleFactory().forEach(::register) }
-            eventJob = scope.launch { station.events.collect(::onStationEvent) }
+            // Sofort abonnieren, sonst geht die Verbindungsmeldung beim Verbinden verloren.
+            eventJob = scope.launch(start = CoroutineStart.UNDISPATCHED) { station.events.collect(::onStationEvent) }
             _session.value = Session(config, driver, station, host)
 
             try {
