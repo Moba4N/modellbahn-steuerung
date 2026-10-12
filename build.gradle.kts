@@ -10,6 +10,7 @@ plugins {
 }
 
 allprojects {
-    group = "de.moba"
+    // Gruppe nach Ordner, damit gleichnamige Module (z. B. driving:ui und trackplan:ui) nicht verwechselt werden.
+    group = "de.moba" + path.substringBeforeLast(':').replace(':', '.')
     version = "0.1.0"
 }

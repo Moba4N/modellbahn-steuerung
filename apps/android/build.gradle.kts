@@ -36,6 +36,8 @@ dependencies {
     implementation(project(":core:ui-shell"))
     implementation(project(":modules:driving:ui"))
     implementation(project(":modules:driving:impl"))
+    implementation(project(":modules:trackplan:ui"))
+    implementation(project(":modules:trackplan:impl"))
     implementation(project(":adapters:catalog"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
