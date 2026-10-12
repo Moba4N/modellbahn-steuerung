@@ -10,9 +10,14 @@ import de.moba.adapters.catalog.StationCatalog
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.driving.ui.DrivingPanel
 import de.moba.modules.driving.ui.DrivingScreen
+import de.moba.modules.trackplan.FileTrackPlanStore
+import de.moba.modules.trackplan.TrackPlanModule
+import de.moba.modules.trackplan.TrackPlanRepository
+import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.SettingsStore
+import java.io.File
 import java.util.prefs.Preferences
 
 /** Einstellungen in der Windows-Registry (Java Preferences). */
@@ -21,6 +26,11 @@ private object DesktopSettings : SettingsStore {
     override fun get(key: String): String? = prefs.get(key, null)
     override fun set(key: String, value: String) = prefs.put(key, value)
 }
+
+/** Gleisbilder liegen im Benutzerordner, z. B. C:\Users\<Name>\.modellbahn-steuerung. */
+private val trackPlans = TrackPlanRepository(
+    FileTrackPlanStore(File(System.getProperty("user.home"), ".modellbahn-steuerung/gleisbilder.txt")),
+)
 
 fun main() = application {
     Window(
@@ -34,10 +44,10 @@ fun main() = application {
                 scope = scope,
                 drivers = StationCatalog.drivers,
                 discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule()) },
+                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans)) },
                 settings = DesktopSettings,
             ).also { it.start() }
         }
-        MobaShell(app, screens = listOf(DrivingScreen), panels = listOf(DrivingPanel))
+        MobaShell(app, screens = listOf(DrivingScreen, TrackPlanScreen), panels = listOf(DrivingPanel))
     }
 }

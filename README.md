@@ -4,7 +4,7 @@ Modulare Steuerungssoftware fuer digitale Modellbahnen, fuer Android und Windows
 Das Architektur-Dokument beschreibt Module, Abo-Modell und Fahrplan der Entwicklung.
 
 Stand: **Phase 1** plus Zentralen-Paket Stufe A. Kern, Simulator, Adapter fuer Z21, Maerklin CS, ESU ECoS,
-DCC-EX und Lenz XpressNet sowie das Modul "Fahren".
+DCC-EX und Lenz XpressNet sowie die Module "Fahren" und "Gleisbild".
 
 ## Aufbau
 
@@ -23,6 +23,7 @@ DCC-EX und Lenz XpressNet sowie das Modul "Fahren".
 | `adapters/xpressnet` | Lenz LZV100/LZV200 und andere XpressNet-Zentralen am LAN/USB-Interface 23151 |
 | `adapters/catalog` | Liste aller Zentralen fuer den Verbindungsdialog und Netzwerksuche |
 | `modules/driving` | Modul "Fahren": `api` (Schnittstelle), `impl` (Logik), `ui` (Fahrregler) |
+| `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
 | `tools/sandbox` | Startet Kern, Simulator und Beispielmodule auf der Konsole |
@@ -89,8 +90,25 @@ Hinweise:
 - **Lenz:** Nach jedem Fahrbefehl fragt die App den Lokzustand ab. Rueckmelder (LR101, 8 Eingaenge je
   Adresse) werden auf Module zu 16 Kontakten umgerechnet.
 
+## Gleisbild
+
+Der Editor arbeitet auf einem Raster mit 45-Grad-Schritten. Gleisformen: Gerade, Kurve 45°, Bogen 90°,
+Weiche links/rechts, Y-Weiche, Dreiwegweiche, Kreuzung 90° und 45°, einfache und doppelte Kreuzungsweiche,
+Prellbock, Signal, Rueckmelder (s88-Modul und Kontakt), Entkuppler und Text.
+Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelder leuchten orange.
+
+| | Kostenlos | Basis | Pro / Club |
+|---|---|---|---|
+| Gleisbilder zeichnen und ausprobieren | ja | ja | ja |
+| Gleisbilder speichern | nein | ja | ja |
+| Gleisbilder gleichzeitig anzeigen | 1 | 1 | bis zu 3 |
+
+Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn-steuerung`,
+Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
+Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
+
 ## Naechste Schritte
 
 - s88-Zuordnung an der YD7001 pruefen; falls noetig LocoNet-Adapter
 - Zentralen-Paket Stufe B (USB/seriell): Intellibox und Tams (P50X), Lenz LI-USB, LocoNet, Maerklin 6050
-- Phase 2: Gleisbild-Stellpult, Rueckmelder-Modul, Lokverwaltung
+- Phase 2: Rueckmelder-Modul, Lokverwaltung; Fahrstrassen im Gleisbild

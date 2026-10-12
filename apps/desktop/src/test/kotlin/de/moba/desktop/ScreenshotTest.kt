@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.Density
 import de.moba.adapters.catalog.StationCatalog
 import de.moba.adapters.simulator.SimulatorStation
 import de.moba.core.model.Loco
+import de.moba.core.runtime.LicenseInfo
 import de.moba.core.station.Direction
 import de.moba.core.station.StationConfig
 import de.moba.core.station.StationDriver
@@ -16,8 +17,22 @@ import de.moba.modules.driving.api.DrivingService
 import de.moba.modules.driving.ui.DrivingPanel
 import de.moba.modules.driving.ui.DrivingScreen
 import de.moba.modules.driving.ui.DrivingUiState
+import de.moba.modules.trackplan.DemoPlans
+import de.moba.modules.trackplan.TrackPlanModule
+import de.moba.modules.trackplan.TrackPlanRepository
+import de.moba.modules.trackplan.api.TrackPlan
+import de.moba.modules.trackplan.api.TrackPlanService
+import de.moba.modules.trackplan.api.TrackPlanStore
+import de.moba.modules.trackplan.api.TrackShape
+import de.moba.modules.trackplan.ui.EditTool
+import de.moba.modules.trackplan.ui.TrackPlanMode
+import de.moba.modules.trackplan.ui.TrackPlanScreen
+import de.moba.modules.trackplan.ui.TrackPlanUiState
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,9 +40,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
-import java.io.File
-import kotlin.test.Test
-import kotlin.test.assertTrue
 
 /**
  * Rendert die Oberflaeche ohne Bildschirm und speichert PNGs (PC und Handy, hell und dunkel).
@@ -47,7 +59,7 @@ class ScreenshotTest {
         val app = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator) + StationCatalog.drivers.filter { it.id != "simulator" },
-            moduleFactory = { listOf(DrivingModule()) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null))) },
         )
         app.connect(StationConfig("simulator")).join()
         val session = app.session.value!!
@@ -72,7 +84,35 @@ class ScreenshotTest {
         sim.simulateFeedback(1, 3, occupied = true)
         sim.simulateFeedback(1, 3, occupied = false)
         sim.setTurnout(12, thrown = true)
+        sim.setTurnout(30, thrown = false)
+        sim.setTurnout(31, thrown = true)
         DrivingUiState.selected.value = 3
+
+        // Zweite App mit Pro-Abo und drei Gleisbildern gleichzeitig
+        val proPlans = object : TrackPlanStore {
+            override fun load() = listOf(DemoPlans.layout(), DemoPlans.stagingYard(), DemoPlans.industry())
+            override fun save(plans: List<TrackPlan>) = Unit
+        }
+        val pro = MobaApp(
+            scope = scope,
+            drivers = listOf(namedSimulator),
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans))) },
+            license = LicenseInfo.of("pro"),
+        )
+        pro.connect(StationConfig("simulator")).join()
+        val proSim = pro.session.value!!.station as SimulatorStation
+        proSim.setTrackPower(true)
+        pro.session.value!!.host.service(TrackPlanService::class)!!.apply {
+            toggleVisible("schattenbahnhof")
+            toggleVisible("industrie")
+        }
+        proSim.setTurnout(12, thrown = true)
+        proSim.setTurnout(22, thrown = true)
+        proSim.setTurnout(41, thrown = true)
+        proSim.setTurnout(30, thrown = false)
+        proSim.setTurnout(31, thrown = true)
+        proSim.simulateFeedback(1, 3, occupied = true)
+        proSim.simulateFeedback(3, 2, occupied = true)
         delay(300)
 
         outDir.mkdirs()
@@ -90,6 +130,29 @@ class ScreenshotTest {
             // Auswahlmenue der Zentralen aufgeklappt (Klick auf das Feld "Digitalzentrale")
             render("pc-zentrale-menue-$suffix", 1440, 900, 1f, click = Offset(330f, 222f)) {
                 MobaShell(app, listOf(DrivingScreen), listOf(DrivingPanel))
+            }
+            val screens = listOf(DrivingScreen, TrackPlanScreen)
+            TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+            render("pc-gleisbild-$suffix", 1440, 900, 1f) {
+                MobaShell(app, screens, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+            }
+            pro.setDarkTheme(dark)
+            render("pc-gleisbild-pro-$suffix", 1440, 900, 1f) {
+                MobaShell(pro, screens, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+            }
+            TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
+            TrackPlanUiState.tool.value = EditTool.Place(TrackShape.TURNOUT_LEFT)
+            TrackPlanUiState.selected.value = 6 to 8
+            render("pc-gleisbild-editor-$suffix", 1440, 900, 1f) {
+                MobaShell(app, screens, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+            }
+            render("handy-gleisbild-editor-$suffix", 824, 1780, 2f) {
+                MobaShell(app, screens, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+            }
+            TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+            TrackPlanUiState.selected.value = null
+            render("handy-gleisbild-pro-$suffix", 824, 1780, 2f) {
+                MobaShell(pro, screens, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
             }
         }
         scope.cancel()

@@ -30,6 +30,8 @@ include(
     ":adapters:catalog",
     ":modules:driving:api",
     ":modules:driving:impl",
+    ":modules:trackplan:api",
+    ":modules:trackplan:impl",
     ":tools:sandbox",
 )
 
@@ -39,6 +41,7 @@ if (providers.gradleProperty("moba.apps").getOrElse("true").toBoolean()) {
     include(
         ":core:ui-shell",
         ":modules:driving:ui",
+        ":modules:trackplan:ui",
         ":apps:desktop",
         ":apps:android",
     )
