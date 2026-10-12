@@ -1,0 +1,155 @@
+package de.moba.modules.vehicles.api
+
+import kotlinx.coroutines.flow.StateFlow
+
+const val VEHICLES_MODULE_ID = "moba.fahrzeuge"
+
+/** Die drei Listen der Fahrzeugverwaltung. Die Speichergrenze ohne Pro gilt je Liste. */
+enum class VehicleGroup(val label: String, val singular: String) {
+    LOCOS("Lokomotiven", "Lok"),
+    FREIGHT("Güterwagen", "Güterwagengattung"),
+    PASSENGER("Personenwagen", "Personenwagengattung"),
+}
+
+enum class Epoch(val label: String) {
+    I("I (bis 1920)"),
+    II("II (1920–1950)"),
+    III("III (1949–1970)"),
+    IV("IV (1970–1990)"),
+    V("V (1990–2006)"),
+    VI("VI (ab 2006)"),
+}
+
+enum class Traction(val label: String) {
+    STEAM("Dampf"),
+    DIESEL("Diesel"),
+    ELECTRIC("Elektro"),
+    RAILCAR("Triebwagen"),
+    OTHER("Sonstige"),
+}
+
+enum class DecoderProtocol(val label: String) {
+    DCC("DCC"),
+    MM("Motorola (MM)"),
+    MFX("mfx"),
+}
+
+/** Eine Lok mit Digitaladresse und Stammdaten. */
+data class LocoRecord(
+    val id: String,
+    val name: String,
+    val address: Int,
+    /** Baureihe, z. B. "BR 218". */
+    val series: String = "",
+    /** Bahnverwaltung, z. B. "DB". */
+    val railway: String = "",
+    val epoch: Epoch? = null,
+    val traction: Traction? = null,
+    val protocol: DecoderProtocol = DecoderProtocol.DCC,
+    val manufacturer: String = "",
+    val articleNumber: String = "",
+    /** Hoechstgeschwindigkeit des Vorbilds in km/h. */
+    val vmax: Int? = null,
+    /** Laenge ueber Puffer in mm. */
+    val lengthMm: Int? = null,
+    /** Funktionsnamen, z. B. 0 = "Licht". */
+    val functions: Map<Int, String> = emptyMap(),
+    val notes: String = "",
+)
+
+/** Bauart einer Wagengattung; [code] ist der Kennbuchstabe nach UIC. */
+enum class WagonCategory(val label: String, val code: String, val group: VehicleGroup) {
+    OPEN("Offener Wagen", "E", VehicleGroup.FREIGHT),
+    COVERED("Gedeckter Wagen", "G", VehicleGroup.FREIGHT),
+    SLIDING_WALL("Schiebewandwagen", "H", VehicleGroup.FREIGHT),
+    REFRIGERATED("Kühlwagen", "I", VehicleGroup.FREIGHT),
+    FLAT("Flachwagen", "R", VehicleGroup.FREIGHT),
+    FLAT_SPECIAL("Flachwagen, Sonderbauart", "S", VehicleGroup.FREIGHT),
+    SLIDING_ROOF("Schiebedachwagen", "T", VehicleGroup.FREIGHT),
+    HOPPER("Schüttgutwagen", "F", VehicleGroup.FREIGHT),
+    TANK("Kesselwagen", "Z", VehicleGroup.FREIGHT),
+    SPECIAL_FREIGHT("Sonderwagen", "U", VehicleGroup.FREIGHT),
+    FIRST("Sitzwagen 1. Klasse", "A", VehicleGroup.PASSENGER),
+    SECOND("Sitzwagen 2. Klasse", "B", VehicleGroup.PASSENGER),
+    MIXED("Sitzwagen 1./2. Klasse", "AB", VehicleGroup.PASSENGER),
+    CONTROL("Steuerwagen", "Bf", VehicleGroup.PASSENGER),
+    DOUBLE_DECK("Doppelstockwagen", "DB", VehicleGroup.PASSENGER),
+    DINING("Speisewagen", "WR", VehicleGroup.PASSENGER),
+    SLEEPER("Schlafwagen", "WL", VehicleGroup.PASSENGER),
+    COUCHETTE("Liegewagen", "Bc", VehicleGroup.PASSENGER),
+    LUGGAGE("Gepäckwagen", "D", VehicleGroup.PASSENGER),
+    ;
+
+    companion object {
+        fun of(group: VehicleGroup) = entries.filter { it.group == group }
+    }
+}
+
+/**
+ * Eine Wagengattung, z. B. "Eaos" (offener Gueterwagen) oder "Bm 235" (Sitzwagen 2. Klasse).
+ * [count] sagt, wie viele Wagen dieser Gattung auf der Anlage laufen.
+ */
+data class WagonClass(
+    val id: String,
+    val group: VehicleGroup,
+    /** Gattungszeichen, z. B. "Eaos" oder "Bm 235". */
+    val code: String,
+    val name: String = "",
+    val category: WagonCategory? = null,
+    val railway: String = "",
+    val epoch: Epoch? = null,
+    val lengthMm: Int? = null,
+    val count: Int = 1,
+    val manufacturer: String = "",
+    val articleNumber: String = "",
+    val notes: String = "",
+) {
+    init {
+        require(group != VehicleGroup.LOCOS) { "Wagengattungen sind Güter- oder Personenwagen" }
+    }
+}
+
+/** Alle Fahrzeuge der Anlage. */
+data class Fleet(
+    val locos: List<LocoRecord> = emptyList(),
+    val wagons: List<WagonClass> = emptyList(),
+) {
+    fun count(group: VehicleGroup) = when (group) {
+        VehicleGroup.LOCOS -> locos.size
+        else -> wagons.count { it.group == group }
+    }
+
+    fun wagons(group: VehicleGroup) = wagons.filter { it.group == group }
+}
+
+/** Liest und schreibt alle Fahrzeuge auf einmal (Datei auf Windows und Android). */
+interface VehicleStore {
+    fun load(): Fleet?
+    fun save(fleet: Fleet)
+}
+
+/**
+ * Oeffentliche Schnittstelle des Moduls "Fahrzeuge". Jede Aenderung wird sofort gespeichert.
+ * Ohne Pro lassen sich je Liste [limit] Eintraege speichern, mit Pro beliebig viele.
+ */
+interface VehicleService {
+    val fleet: StateFlow<Fleet>
+
+    /** Hoechstzahl je Liste, `null` = unbegrenzt. */
+    val limit: Int?
+
+    fun canAdd(group: VehicleGroup): Boolean
+
+    /** Neue Lok anlegen oder bestehende aendern (gleiche [LocoRecord.id]). @throws VehicleLimitException */
+    fun saveLoco(loco: LocoRecord): LocoRecord
+    fun deleteLoco(id: String)
+
+    /** Neue Wagengattung anlegen oder bestehende aendern. @throws VehicleLimitException */
+    fun saveWagon(wagon: WagonClass): WagonClass
+    fun deleteWagon(id: String)
+
+    /** Eine freie Id fuer einen neuen Eintrag. */
+    fun newId(group: VehicleGroup): String
+}
+
+class VehicleLimitException(message: String) : Exception(message)

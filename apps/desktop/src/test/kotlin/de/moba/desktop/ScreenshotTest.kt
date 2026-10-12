@@ -28,6 +28,18 @@ import de.moba.modules.trackplan.ui.EditTool
 import de.moba.modules.trackplan.ui.TrackPlanMode
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanUiState
+import de.moba.modules.vehicles.VehicleModule
+import de.moba.modules.vehicles.VehicleRepository
+import de.moba.modules.vehicles.api.Epoch
+import de.moba.modules.vehicles.api.LocoRecord
+import de.moba.modules.vehicles.api.Traction
+import de.moba.modules.vehicles.api.VehicleGroup
+import de.moba.modules.vehicles.api.VehicleService
+import de.moba.modules.vehicles.api.WagonCategory
+import de.moba.modules.vehicles.api.WagonClass
+import de.moba.modules.vehicles.ui.VehicleDraft
+import de.moba.modules.vehicles.ui.VehiclesScreen
+import de.moba.modules.vehicles.ui.VehiclesUiState
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import java.io.File
@@ -59,7 +71,7 @@ class ScreenshotTest {
         val app = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator) + StationCatalog.drivers.filter { it.id != "simulator" },
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null))) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null))) },
         )
         app.connect(StationConfig("simulator")).join()
         val session = app.session.value!!
@@ -96,7 +108,7 @@ class ScreenshotTest {
         val pro = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator),
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans))) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null))) },
             license = LicenseInfo.of("pro"),
         )
         pro.connect(StationConfig("simulator")).join()
@@ -113,6 +125,24 @@ class ScreenshotTest {
         proSim.setTurnout(31, thrown = true)
         proSim.simulateFeedback(1, 3, occupied = true)
         proSim.simulateFeedback(3, 2, occupied = true)
+
+        // Fahrzeuge: kostenlos voll (3 Loks), mit Pro mehr Gueterwagen als die kostenlose Grenze
+        val freeVehicles = session.host.service(VehicleService::class)!!
+        freeVehicles.saveLoco(
+            LocoRecord("fz-lok-1", "BR 218", 3, "BR 218", "DB", Epoch.IV, Traction.DIESEL, manufacturer = "Roco", vmax = 140, lengthMm = 189),
+        )
+        freeVehicles.saveLoco(LocoRecord("fz-lok-2", "ICE 3", 12, "BR 403", "DB AG", Epoch.V, Traction.RAILCAR))
+        freeVehicles.saveLoco(LocoRecord("fz-lok-3", "V 100", 5, "BR 212", "DB", Epoch.III, Traction.DIESEL))
+        freeVehicles.saveWagon(WagonClass("fz-pw-1", VehicleGroup.PASSENGER, "Bnrz 451", "Silberling 2. Klasse", WagonCategory.SECOND, "DB", Epoch.IV, 303, 3))
+        freeVehicles.saveWagon(WagonClass("fz-pw-2", VehicleGroup.PASSENGER, "BDnrzf 740", "Steuerwagen", WagonCategory.CONTROL, "DB", Epoch.IV, 303, 1))
+        val proVehicles = pro.session.value!!.host.service(VehicleService::class)!!
+        listOf(
+            WagonClass("fz-gw-1", VehicleGroup.FREIGHT, "Eaos", "Offener Hochbordwagen", WagonCategory.OPEN, "DB", Epoch.IV, 162, 8),
+            WagonClass("fz-gw-2", VehicleGroup.FREIGHT, "Fals", "Selbstentladewagen", WagonCategory.HOPPER, "DB", Epoch.IV, 140, 6),
+            WagonClass("fz-gw-3", VehicleGroup.FREIGHT, "Gbs", "Gedeckter Güterwagen", WagonCategory.COVERED, "DB", Epoch.IV, 162, 4),
+            WagonClass("fz-gw-4", VehicleGroup.FREIGHT, "Zacns", "Kesselwagen", WagonCategory.TANK, "VTG", Epoch.V, 140, 5),
+            WagonClass("fz-gw-5", VehicleGroup.FREIGHT, "Sgns", "Containertragwagen", WagonCategory.FLAT_SPECIAL, "DB AG", Epoch.V, 227, 2),
+        ).forEach { proVehicles.saveWagon(it) }
         delay(300)
 
         outDir.mkdirs()
@@ -153,6 +183,27 @@ class ScreenshotTest {
             TrackPlanUiState.selected.value = null
             render("handy-gleisbild-pro-$suffix", 824, 1780, 2f) {
                 MobaShell(pro, screens, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+            }
+
+            val all = listOf(DrivingScreen, VehiclesScreen, TrackPlanScreen)
+            VehiclesUiState.group.value = VehicleGroup.LOCOS
+            VehiclesUiState.draft.value = VehicleDraft.Loco(freeVehicles.fleet.value.locos.first(), isNew = false)
+            render("pc-fahrzeuge-loks-$suffix", 1440, 900, 1f) {
+                MobaShell(app, all, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+            }
+            VehiclesUiState.group.value = VehicleGroup.FREIGHT
+            VehiclesUiState.draft.value = VehicleDraft.Wagon(proVehicles.fleet.value.wagons.first(), isNew = false)
+            render("pc-fahrzeuge-gueterwagen-pro-$suffix", 1440, 900, 1f) {
+                MobaShell(pro, all, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+            }
+            VehiclesUiState.group.value = VehicleGroup.PASSENGER
+            VehiclesUiState.draft.value = null
+            render("handy-fahrzeuge-$suffix", 824, 1780, 2f) {
+                MobaShell(app, all, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+            }
+            VehiclesUiState.draft.value = VehicleDraft.Wagon(WagonClass("fz-pw-9", VehicleGroup.PASSENGER, ""), isNew = true)
+            render("handy-fahrzeuge-neu-$suffix", 824, 1780, 2f) {
+                MobaShell(app, all, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
             }
         }
         scope.cancel()

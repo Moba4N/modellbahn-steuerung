@@ -4,7 +4,7 @@ Modulare Steuerungssoftware fuer digitale Modellbahnen, fuer Android und Windows
 Das Architektur-Dokument beschreibt Module, Abo-Modell und Fahrplan der Entwicklung.
 
 Stand: **Phase 1** plus Zentralen-Paket Stufe A. Kern, Simulator, Adapter fuer Z21, Maerklin CS, ESU ECoS,
-DCC-EX und Lenz XpressNet sowie die Module "Fahren" und "Gleisbild".
+DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge" und "Gleisbild".
 
 ## Aufbau
 
@@ -23,6 +23,7 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren" und "Gleisbild".
 | `adapters/xpressnet` | Lenz LZV100/LZV200 und andere XpressNet-Zentralen am LAN/USB-Interface 23151 |
 | `adapters/catalog` | Liste aller Zentralen fuer den Verbindungsdialog und Netzwerksuche |
 | `modules/driving` | Modul "Fahren": `api` (Schnittstelle), `impl` (Logik), `ui` (Fahrregler) |
+| `modules/vehicles` | Modul "Fahrzeuge": Loks, Gueterwagen- und Personenwagengattungen anlegen |
 | `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
@@ -89,6 +90,20 @@ Hinweise:
   Sensoren werden als Rueckmelder gezaehlt (Sensor 1 = Modul 1, Kontakt 1).
 - **Lenz:** Nach jedem Fahrbefehl fragt die App den Lokzustand ab. Rueckmelder (LR101, 8 Eingaenge je
   Adresse) werden auf Module zu 16 Kontakten umgerechnet.
+
+## Fahrzeuge
+
+Drei Listen: Lokomotiven (Adresse, Baureihe, Bahnverwaltung, Epoche, Antrieb, Protokoll, Funktionsnamen),
+Gueterwagengattungen und Personenwagengattungen (Gattungszeichen wie Eaos oder Bm 235, Bauart, Anzahl).
+Fuer gaengige DB-Gattungen gibt es Vorlagen. Angelegte Loks erscheinen mit Namen im Fahrpult.
+Jede Aenderung wird sofort in `fahrzeuge.txt` gespeichert (gleicher Ordner wie die Gleisbilder).
+
+| | Kostenlos und Basis | Pro / Club |
+|---|---|---|
+| Eintraege je Liste | 3 | unbegrenzt |
+
+Wer nach einem Abo-Wechsel mehr Eintraege hat als erlaubt, behaelt sie und kann sie bearbeiten,
+aber keine neuen anlegen.
 
 ## Gleisbild
 
