@@ -374,7 +374,7 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
         TextInput("Bahnverwaltung", r.railway, Modifier.weight(1f)) { r = r.copy(railway = it) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Choice("Epoche", Epoch.entries, r.epoch, { it.label }, Modifier.weight(1f), optional = true) { r = r.copy(epoch = it) }
+        Choice("Epoche", Epoch.entries, r.epoch, { it.label }, Modifier.weight(1f), optional = true, short = { it.name }) { r = r.copy(epoch = it) }
         Choice("Antrieb", Traction.entries, r.traction, { it.label }, Modifier.weight(1f), optional = true) {
             r = r.copy(traction = it)
         }
@@ -447,7 +447,7 @@ private fun WagonForm(service: VehicleService, draft: VehicleDraft.Wagon) {
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         TextInput("Bahnverwaltung", r.railway, Modifier.weight(1f)) { r = r.copy(railway = it) }
-        Choice("Epoche", Epoch.entries, r.epoch, { it.label }, Modifier.weight(1f), optional = true) { r = r.copy(epoch = it) }
+        Choice("Epoche", Epoch.entries, r.epoch, { it.label }, Modifier.weight(1f), optional = true, short = { it.name }) { r = r.copy(epoch = it) }
     }
     NumberInput("Länge über Puffer (mm)", length, Modifier.fillMaxWidth()) { length = it }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -538,12 +538,14 @@ private fun <T> Choice(
     text: (T) -> String,
     modifier: Modifier,
     optional: Boolean = false,
+    /** Kurzform im Feld, wenn der Menuetext zu lang ist. */
+    short: (T) -> String = text,
     onSelect: (T?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
         OutlinedTextField(
-            value = selected?.let(text) ?: "",
+            value = selected?.let(short) ?: "",
             onValueChange = {},
             readOnly = true,
             singleLine = true,
