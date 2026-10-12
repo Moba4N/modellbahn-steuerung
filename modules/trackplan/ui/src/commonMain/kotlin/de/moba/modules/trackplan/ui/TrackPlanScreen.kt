@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -282,8 +283,8 @@ private fun ColumnScope.EditorView(service: TrackPlanService) {
     val plan = plans.firstOrNull { it.id == editId } ?: plans.firstOrNull { it.id in visible } ?: plans.first()
     val wide = LocalWideLayout.current
 
-    EditorToolbar(service, plans, plan)
     if (wide) {
+        EditorToolbar(service, plans, plan)
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Palette(Modifier.width(200.dp).fillMaxHeight(), vertical = true)
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -292,9 +293,16 @@ private fun ColumnScope.EditorView(service: TrackPlanService) {
             }
         }
     } else {
-        Palette(Modifier.fillMaxWidth(), vertical = false)
-        EditorGrid(service, plan, Modifier.weight(1f).fillMaxWidth())
-        TileProperties(service, plan)
+        // Auf dem Handy scrollt die ganze Seite, damit das Raster genug Hoehe bekommt.
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EditorToolbar(service, plans, plan)
+            Palette(Modifier.fillMaxWidth(), vertical = false)
+            EditorGrid(service, plan, Modifier.height(420.dp).fillMaxWidth())
+            TileProperties(service, plan)
+        }
     }
 }
 
