@@ -14,6 +14,10 @@ import de.moba.modules.trackplan.FileTrackPlanStore
 import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.trackplan.ui.TrackPlanScreen
+import de.moba.modules.vehicles.FileVehicleStore
+import de.moba.modules.vehicles.VehicleModule
+import de.moba.modules.vehicles.VehicleRepository
+import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.SettingsStore
@@ -27,10 +31,10 @@ private object DesktopSettings : SettingsStore {
     override fun set(key: String, value: String) = prefs.put(key, value)
 }
 
-/** Gleisbilder liegen im Benutzerordner, z. B. C:\Users\<Name>\.modellbahn-steuerung. */
-private val trackPlans = TrackPlanRepository(
-    FileTrackPlanStore(File(System.getProperty("user.home"), ".modellbahn-steuerung/gleisbilder.txt")),
-)
+/** Gleisbilder und Fahrzeuge liegen im Benutzerordner, z. B. C:\Users\<Name>\.modellbahn-steuerung. */
+private val dataDir = File(System.getProperty("user.home"), ".modellbahn-steuerung")
+private val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dataDir, "gleisbilder.txt")))
+private val vehicles = VehicleRepository(FileVehicleStore(File(dataDir, "fahrzeuge.txt")))
 
 fun main() = application {
     Window(
@@ -44,10 +48,10 @@ fun main() = application {
                 scope = scope,
                 drivers = StationCatalog.drivers,
                 discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans)) },
+                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles)) },
                 settings = DesktopSettings,
             ).also { it.start() }
         }
-        MobaShell(app, screens = listOf(DrivingScreen, TrackPlanScreen), panels = listOf(DrivingPanel))
+        MobaShell(app, screens = listOf(DrivingScreen, VehiclesScreen, TrackPlanScreen), panels = listOf(DrivingPanel))
     }
 }

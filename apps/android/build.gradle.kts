@@ -38,6 +38,8 @@ dependencies {
     implementation(project(":modules:driving:impl"))
     implementation(project(":modules:trackplan:ui"))
     implementation(project(":modules:trackplan:impl"))
+    implementation(project(":modules:vehicles:ui"))
+    implementation(project(":modules:vehicles:impl"))
     implementation(project(":adapters:catalog"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
