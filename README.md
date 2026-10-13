@@ -4,7 +4,7 @@ Modulare Steuerungssoftware fuer digitale Modellbahnen, fuer Android und Windows
 Das Architektur-Dokument beschreibt Module, Abo-Modell und Fahrplan der Entwicklung.
 
 Stand: **Phase 1** plus Zentralen-Paket Stufe A. Kern, Simulator, Adapter fuer Z21, Maerklin CS, ESU ECoS,
-DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge" und "Gleisbild".
+DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und "Gleisbild".
 
 ## Aufbau
 
@@ -24,6 +24,7 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge" und "Gleisbild"
 | `adapters/catalog` | Liste aller Zentralen fuer den Verbindungsdialog und Netzwerksuche |
 | `modules/driving` | Modul "Fahren": `api` (Schnittstelle), `impl` (Logik), `ui` (Fahrregler) |
 | `modules/vehicles` | Modul "Fahrzeuge": Loks, Gueterwagen- und Personenwagengattungen anlegen |
+| `modules/decoder` | Modul "Decoder": CV-Programmierung und Decoder-Datenbank |
 | `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
@@ -104,6 +105,19 @@ Jede Aenderung wird sofort in `fahrzeuge.txt` gespeichert (gleicher Ordner wie d
 
 Wer nach einem Abo-Wechsel mehr Eintraege hat als erlaubt, behaelt sie und kann sie bearbeiten,
 aber keine neuen anlegen.
+
+## Decoder
+
+CVs lesen und schreiben ist kostenlos: auf dem Programmiergleis (lesen und schreiben) oder waehrend
+der Fahrt auf dem Hauptgleis (POM, nur schreiben). Dazu gibt es "Decoder auslesen" (CV 1 bis 8, 17, 18,
+19, 29 mit Hersteller und Adresse), "Adresse schreiben" (kurz oder lang samt CV 29) und die Schalter
+von CV 29 einzeln.
+
+Die Decoder-Datenbank sichert die Werte je Lok in `decoder.txt` und schreibt sie spaeter zurueck.
+Sie braucht die Zusatzlizenz "Decoder-Datenbank" (Schluessel `decoder`, im Club-Abo enthalten).
+
+Programmieren geht bisher mit Zentralen am Z21-Protokoll (YaMoRC YD7001, Roco z21) und im Simulator.
+An echter Hardware ist es noch nicht geprueft.
 
 ## Gleisbild
 

@@ -7,6 +7,10 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import de.moba.adapters.catalog.StationCatalog
+import de.moba.modules.decoder.DecoderModule
+import de.moba.modules.decoder.DecoderRepository
+import de.moba.modules.decoder.FileDecoderStore
+import de.moba.modules.decoder.ui.DecoderScreen
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.driving.ui.DrivingPanel
 import de.moba.modules.driving.ui.DrivingScreen
@@ -35,6 +39,7 @@ private object DesktopSettings : SettingsStore {
 private val dataDir = File(System.getProperty("user.home"), ".modellbahn-steuerung")
 private val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dataDir, "gleisbilder.txt")))
 private val vehicles = VehicleRepository(FileVehicleStore(File(dataDir, "fahrzeuge.txt")))
+private val decoders = DecoderRepository(FileDecoderStore(File(dataDir, "decoder.txt")))
 
 fun main() = application {
     Window(
@@ -48,10 +53,10 @@ fun main() = application {
                 scope = scope,
                 drivers = StationCatalog.drivers,
                 discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles)) },
+                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders)) },
                 settings = DesktopSettings,
             ).also { it.start() }
         }
-        MobaShell(app, screens = listOf(DrivingScreen, VehiclesScreen, TrackPlanScreen), panels = listOf(DrivingPanel))
+        MobaShell(app, screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen), panels = listOf(DrivingPanel))
     }
 }

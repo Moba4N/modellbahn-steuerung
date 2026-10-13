@@ -12,6 +12,13 @@ import de.moba.core.runtime.LicenseInfo
 import de.moba.core.station.Direction
 import de.moba.core.station.StationConfig
 import de.moba.core.station.StationDriver
+import de.moba.modules.decoder.DecoderModule
+import de.moba.modules.decoder.DecoderRepository
+import de.moba.modules.decoder.api.DecoderProfile
+import de.moba.modules.decoder.api.DecoderService
+import de.moba.modules.decoder.api.StandardCvs
+import de.moba.modules.decoder.ui.DecoderScreen
+import de.moba.modules.decoder.ui.DecoderUiState
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.driving.api.DrivingService
 import de.moba.modules.driving.ui.DrivingPanel
@@ -71,7 +78,7 @@ class ScreenshotTest {
         val app = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator) + StationCatalog.drivers.filter { it.id != "simulator" },
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null))) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null))) },
         )
         app.connect(StationConfig("simulator")).join()
         val session = app.session.value!!
@@ -108,8 +115,8 @@ class ScreenshotTest {
         val pro = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator),
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null))) },
-            license = LicenseInfo.of("pro"),
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null))) },
+            license = LicenseInfo.of("pro", "decoder"),
         )
         pro.connect(StationConfig("simulator")).join()
         val proSim = pro.session.value!!.station as SimulatorStation
@@ -143,6 +150,13 @@ class ScreenshotTest {
             WagonClass("fz-gw-4", VehicleGroup.FREIGHT, "Zacns", "Kesselwagen", WagonCategory.TANK, "VTG", Epoch.V, 140, 5),
             WagonClass("fz-gw-5", VehicleGroup.FREIGHT, "Sgns", "Containertragwagen", WagonCategory.FLAT_SPECIAL, "DB AG", Epoch.V, 227, 2),
         ).forEach { proVehicles.saveWagon(it) }
+
+        // Decoder: Werte aus dem Simulator lesen; mit Zusatzlizenz zwei gespeicherte Programmierungen
+        val decoder = session.host.service(DecoderService::class)!!
+        val readValues = StandardCvs.readSet.associateWith { decoder.read(it) }
+        val proDecoder = pro.session.value!!.host.service(DecoderService::class)!!
+        proDecoder.saveProfile(DecoderProfile("decoder-1", "BR 218 Sound", "BR 218", 3, "ESU LokSound 5", readValues + (3 to 20) + (4 to 16)))
+        proDecoder.saveProfile(DecoderProfile("decoder-2", "V 100 Werkseinstellung", "V 100", 5, "Lenz Standard+", mapOf(1 to 5, 2 to 4, 3 to 6, 4 to 6, 7 to 15, 8 to 99, 29 to 6)))
         delay(300)
 
         outDir.mkdirs()
@@ -204,6 +218,20 @@ class ScreenshotTest {
             VehiclesUiState.draft.value = VehicleDraft.Wagon(WagonClass("fz-pw-9", VehicleGroup.PASSENGER, ""), isNew = true)
             render("handy-fahrzeuge-neu-$suffix", 824, 1780, 2f) {
                 MobaShell(app, all, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+            }
+
+            val withDecoder = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen)
+            DecoderUiState.values.value = readValues
+            DecoderUiState.cv.value = "29"
+            DecoderUiState.value.value = "6"
+            render("pc-decoder-$suffix", 1440, 900, 1f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DecoderScreen.moduleId)
+            }
+            render("pc-decoder-datenbank-$suffix", 1440, 900, 1f) {
+                MobaShell(pro, withDecoder, listOf(DrivingPanel), initialScreen = DecoderScreen.moduleId)
+            }
+            render("handy-decoder-$suffix", 824, 1780, 2f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DecoderScreen.moduleId)
             }
         }
         scope.cancel()

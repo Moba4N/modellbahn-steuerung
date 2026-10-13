@@ -81,4 +81,21 @@ class Z21CodecTest {
         assertEquals(emptyList(), Z21Codec.decode(bytes(0x10, 0x00, 0x40)))
         assertEquals(emptyList(), Z21Codec.decode(Z21Codec.packet(0x99, bytes(1, 2, 3))))
     }
+
+    @Test
+    fun encodesCvProgramming() {
+        // CV 1 lesen: X-Header 0x23, 0x11, CV-Adresse 0 (CV 1), Pruefsumme 0x32
+        assertContentEquals(bytes(0x09, 0x00, 0x40, 0x00, 0x23, 0x11, 0x00, 0x00, 0x32), Z21Codec.cvRead(1))
+        assertContentEquals(bytes(0x0A, 0x00, 0x40, 0x00, 0x24, 0x12, 0x00, 0x1C, 0x06, 0x2C), Z21Codec.cvWrite(29, 6))
+        // POM: Lok 300 (lange Adresse), CV 3 = 20
+        val pom = Z21Codec.cvPomWrite(300, 3, 20)
+        assertContentEquals(bytes(0xE6, 0x30, 0xC1, 0x2C, 0xEC, 0x02, 0x14), pom.copyOfRange(4, 11))
+    }
+
+    @Test
+    fun decodesCvAnswers() {
+        assertEquals(listOf(Z21Message.CvResult(29, 6)), Z21Codec.decode(Z21Codec.xPacket(0x64, 0x14, 0x00, 0x1C, 0x06)))
+        assertEquals(listOf(Z21Message.CvNack(shortCircuit = false)), Z21Codec.decode(Z21Codec.xPacket(0x61, 0x13)))
+        assertEquals(listOf(Z21Message.CvNack(shortCircuit = true)), Z21Codec.decode(Z21Codec.xPacket(0x61, 0x12)))
+    }
 }

@@ -2,11 +2,13 @@
 
 package de.moba.adapters.z21
 
+import de.moba.core.station.CvException
 import de.moba.core.station.Direction
 import de.moba.core.station.LocoState
 import de.moba.core.station.StationEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -14,6 +16,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -139,6 +142,56 @@ class Z21StationTest {
         station.setTurnout(12, thrown = true)
         assertContentEquals(Z21Codec.setTurnout(12, thrown = true, activate = false), transport.sent.last())
         assertContentEquals(Z21Codec.setTurnout(12, thrown = true, activate = true), transport.sent[transport.sent.size - 2])
+        station.disconnect()
+    }
+
+    @Test
+    fun readsAndWritesCvsOnTheProgrammingTrack() = runTest {
+        val transport = FakeTransport()
+        val station = station(transport)
+        station.connect()
+        transport.reply(Z21Codec.xPacket(0x61, 0x01)) // Gleisspannung an
+        advanceUntilIdle()
+
+        // runCurrent statt advanceUntilIdle: sonst laeuft die Wartezeit auf die Antwort ab.
+        val read = async { station.readCv(29) }
+        runCurrent()
+        assertContentEquals(Z21Codec.cvRead(29), transport.sent.last())
+        transport.reply(Z21Codec.xPacket(0x64, 0x14, 0x00, 0x1C, 0x06))
+        assertEquals(6, read.await())
+        // Programmiermodus verlassen: Gleisspannung wie vorher wieder an
+        assertContentEquals(Z21Codec.trackPowerOn(), transport.sent.last())
+
+        val write = async { station.writeCv(1, 3) }
+        runCurrent()
+        assertContentEquals(Z21Codec.cvWrite(1, 3), transport.sent.last())
+        transport.reply(Z21Codec.xPacket(0x64, 0x14, 0x00, 0x00, 0x03))
+        write.await()
+        station.disconnect()
+    }
+
+    @Test
+    fun reportsMissingDecoder() = runTest {
+        val transport = FakeTransport()
+        val station = station(transport)
+        station.connect()
+        val read = async { runCatching { station.readCv(1) } }
+        runCurrent()
+        transport.reply(Z21Codec.xPacket(0x61, 0x13))
+        val error = read.await().exceptionOrNull()
+        assertTrue(error is CvException && "Programmiergleis" in error.message!!)
+        // Gleisspannung war aus und bleibt aus
+        assertContentEquals(Z21Codec.trackPowerOff(), transport.sent.last())
+        station.disconnect()
+    }
+
+    @Test
+    fun writesOnMainWithoutWaiting() = runTest {
+        val transport = FakeTransport()
+        val station = station(transport)
+        station.connect()
+        station.writeCvOnMain(3, 3, 20)
+        assertContentEquals(Z21Codec.cvPomWrite(3, 3, 20), transport.sent.last())
         station.disconnect()
     }
 }
