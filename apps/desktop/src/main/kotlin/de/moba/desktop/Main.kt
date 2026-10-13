@@ -2,6 +2,8 @@ package de.moba.desktop
 
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -30,6 +32,7 @@ import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.SettingsStore
 import java.awt.FileDialog
+import org.jetbrains.skia.Image
 import java.io.File
 import java.util.prefs.Preferences
 
@@ -71,10 +74,15 @@ private fun imagePicker(window: java.awt.Frame) = ImagePicker { onResult ->
     onResult(chosen?.readBytes())
 }
 
+private val appIcon = BitmapPainter(
+    Image.makeFromEncoded(object {}.javaClass.getResourceAsStream("/icon.png")!!.readBytes()).toComposeImageBitmap(),
+)
+
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "Modellbahn-Steuerung",
+        icon = appIcon,
         state = rememberWindowState(width = 1360.dp, height = 860.dp),
     ) {
         val scope = rememberCoroutineScope()

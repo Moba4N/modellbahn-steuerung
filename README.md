@@ -146,6 +146,17 @@ Dort lassen sich kostenlos einstellen:
 - eigenes Hintergrundbild als Wasserzeichen in drei Staerken. Das Bild wird als Kopie
   `hintergrund.bild` im Datenordner gespeichert.
 
+## Microsoft Store (MSIX)
+
+Der GitHub-Build legt unter "Actions" den Download `windows-msix` ab:
+
+- `Modellbahn-Steuerung-0.1.0.0.msix`: unsigniert, zum Hochladen im Partner Center (Microsoft signiert es).
+- `Modellbahn-Steuerung-0.1.0.0-test.msix` mit `Modellbahn-Steuerung-Test.cer`: zum Ausprobieren ohne Store.
+
+Paketname und Herausgeber aus dem Partner Center ("Produktidentitaet") als Repository-Variablen
+`MSIX_IDENTITY_NAME`, `MSIX_PUBLISHER` und `MSIX_PUBLISHER_DISPLAY_NAME` eintragen. Vorlage und Skript liegen
+in `apps/desktop/packaging/msix`.
+
 ## Lizenzen
 
 Ohne Lizenz laeuft die kostenlose Version. Freischaltungen: `pro`, `decoder` (Decoder-Datenbank), `club` (alles).
