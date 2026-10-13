@@ -1,6 +1,13 @@
 package de.moba.modules.vehicles.ui
 
 import androidx.compose.foundation.BorderStroke
+import de.moba.ui.shell.decodeImage
+import de.moba.ui.shell.LocalImagePicker
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -204,6 +211,7 @@ private fun VehicleList(service: VehicleService, fleet: Fleet, group: VehicleGro
             fleet.locos.forEach { loco ->
                 VehicleCard(
                     icon = Icons.Filled.Train,
+                    image = rememberVehicleImage(service, loco.id),
                     title = loco.name,
                     subtitle = listOf(
                         "Adresse ${loco.address}",
@@ -223,6 +231,7 @@ private fun VehicleList(service: VehicleService, fleet: Fleet, group: VehicleGro
             fleet.wagons(group).forEach { wagon ->
                 VehicleCard(
                     icon = group.icon(),
+                    image = rememberVehicleImage(service, wagon.id),
                     title = wagon.code + if (wagon.name.isNotBlank()) "  ${wagon.name}" else "",
                     subtitle = listOf(
                         wagon.category?.label,
@@ -247,6 +256,8 @@ private fun NewButton(service: VehicleService, group: VehicleGroup) {
         Button(onClick = {
             say(null)
             val id = service.newId(group)
+            // Ein altes Foto unter derselben Id (z. B. abgebrochener Entwurf) nicht uebernehmen
+            if (service.image(id) != null) service.setImage(id, null)
             VehiclesUiState.draft.value = when (group) {
                 VehicleGroup.LOCOS -> VehicleDraft.Loco(LocoRecord(id, "", 3), isNew = true)
                 else -> VehicleDraft.Wagon(WagonClass(id, group, ""), isNew = true)
@@ -270,6 +281,7 @@ private fun NewButton(service: VehicleService, group: VehicleGroup) {
 @Composable
 private fun VehicleCard(
     icon: ImageVector,
+    image: ImageBitmap?,
     title: String,
     subtitle: String,
     trailing: String?,
@@ -287,10 +299,19 @@ private fun VehicleCard(
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(36.dp).clip(CircleShape).background(primary.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center,
-            ) { Icon(icon, null, tint = primary, modifier = Modifier.size(20.dp)) }
+            if (image != null) {
+                Image(
+                    image,
+                    null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(width = 64.dp, height = 40.dp).clip(MaterialTheme.shapes.small),
+                )
+            } else {
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape).background(primary.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(icon, null, tint = primary, modifier = Modifier.size(20.dp)) }
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -362,6 +383,7 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
     }
 
     FormHeader(if (draft.isNew) "Neue Lok" else r.name.ifBlank { "Lok" })
+    PhotoSection(service, r.id)
     TextInput("Name", r.name) { r = r.copy(name = it) }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         NumberInput("Adresse", address, Modifier.weight(1f)) { address = it }
@@ -410,6 +432,7 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
             )
         },
         onDelete = { service.deleteLoco(r.id) },
+        onCancel = { if (draft.isNew && service.image(r.id) != null) service.setImage(r.id, null) },
     )
 }
 
@@ -429,6 +452,7 @@ private fun WagonForm(service: VehicleService, draft: VehicleDraft.Wagon) {
     val group = r.group
 
     FormHeader(if (draft.isNew) "Neue ${group.singular}" else r.code.ifBlank { group.singular })
+    PhotoSection(service, r.id)
     if (draft.isNew) {
         Choice("Vorlage", WagonTemplates.of(group), null, { "${it.code} – ${it.name}" }, Modifier.fillMaxWidth()) { t ->
             if (t != null) {
@@ -462,11 +486,12 @@ private fun WagonForm(service: VehicleService, draft: VehicleDraft.Wagon) {
             service.saveWagon(r.copy(code = r.code.trim(), lengthMm = length.toIntOrNull(), count = count.toIntOrNull() ?: 0))
         },
         onDelete = { service.deleteWagon(r.id) },
+        onCancel = { if (draft.isNew && service.image(r.id) != null) service.setImage(r.id, null) },
     )
 }
 
 @Composable
-private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit) {
+private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit, onCancel: () -> Unit = {}) {
     Spacer(Modifier.size(4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(onClick = {
@@ -485,6 +510,7 @@ private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit)
             Text("Speichern")
         }
         TextButton(onClick = {
+            onCancel()
             VehiclesUiState.draft.value = null
             say(null)
         }) { Text("Abbrechen") }
@@ -575,6 +601,58 @@ private fun <T> Choice(
                     },
                 )
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Fotos
+
+/** Das Foto eines Fahrzeugs als Bild; laedt nach jeder Aenderung neu. */
+@Composable
+private fun rememberVehicleImage(service: VehicleService, id: String): ImageBitmap? {
+    val version by service.imageVersion.collectAsState()
+    return remember(id, version) { service.image(id)?.let(::decodeImage) }
+}
+
+/** Foto oben im Formular: anzeigen, waehlen (Windows: Dateidialog, Android: Galerie) oder entfernen. */
+@Composable
+private fun PhotoSection(service: VehicleService, id: String) {
+    val picker = LocalImagePicker.current
+    val image = rememberVehicleImage(service, id)
+    Surface(
+        Modifier.fillMaxWidth().height(180.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        if (image != null) {
+            Image(image, "Foto", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        } else {
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Noch kein Foto", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(enabled = picker != null, onClick = {
+            picker?.pick { bytes ->
+                if (bytes == null) return@pick
+                when {
+                    decodeImage(bytes) == null -> say("Diese Datei ist kein lesbares Bild (PNG, JPEG, WebP, BMP oder GIF).")
+                    else -> runCatching { service.setImage(id, bytes) }.onFailure { say(it.message) }.onSuccess { say(null) }
+                }
+            }
+        }) {
+            Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(if (image == null) "Foto hinzufügen" else "Foto ändern")
+        }
+        if (image != null) {
+            TextButton(onClick = { service.setImage(id, null) }) { Text("Foto entfernen") }
         }
     }
 }

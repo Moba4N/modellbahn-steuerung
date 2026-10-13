@@ -165,6 +165,7 @@ class ScreenshotTest {
             LocoRecord("fz-lok-1", "BR 218", 3, "BR 218", "DB", Epoch.IV, Traction.DIESEL, manufacturer = "Roco", vmax = 140, lengthMm = 189),
         )
         freeVehicles.saveLoco(LocoRecord("fz-lok-2", "ICE 3", 12, "BR 403", "DB AG", Epoch.V, Traction.RAILCAR))
+        freeVehicles.setImage("fz-lok-1", demoLocoPhoto())
         freeVehicles.saveLoco(LocoRecord("fz-lok-3", "V 100", 5, "BR 212", "DB", Epoch.III, Traction.DIESEL))
         freeVehicles.saveWagon(WagonClass("fz-pw-1", VehicleGroup.PASSENGER, "Bnrz 451", "Silberling 2. Klasse", WagonCategory.SECOND, "DB", Epoch.IV, 303, 3))
         freeVehicles.saveWagon(WagonClass("fz-pw-2", VehicleGroup.PASSENGER, "BDnrzf 740", "Steuerwagen", WagonCategory.CONTROL, "DB", Epoch.IV, 303, 1))
@@ -390,6 +391,27 @@ class ScreenshotTest {
     }
 
     /** Beispielfoto fuer das Wasserzeichen: Abendhimmel mit Gleisen in Fluchtperspektive. */
+    /** Ein gezeichnetes "Foto" einer roten Diesellok fuer die Fahrzeugliste. */
+    private fun demoLocoPhoto(): ByteArray {
+        val w = 800
+        val h = 450
+        val surface = Surface.makeRasterN32Premul(w, h)
+        val canvas = surface.canvas
+        canvas.drawRect(
+            Rect.makeWH(w.toFloat(), h.toFloat()),
+            Paint().apply { shader = Shader.makeLinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(0xFF9CC8E8.toInt(), 0xFFE8E2D0.toInt())) },
+        )
+        val paint = Paint().apply { isAntiAlias = true }
+        canvas.drawRect(Rect.makeLTRB(0f, 360f, w.toFloat(), 372f), paint.apply { color = 0xFF555555.toInt() })
+        canvas.drawRect(Rect.makeLTRB(90f, 170f, 710f, 320f), paint.apply { color = 0xFFB3261E.toInt() })
+        canvas.drawRect(Rect.makeLTRB(300f, 120f, 500f, 175f), paint.apply { color = 0xFFB3261E.toInt() })
+        canvas.drawRect(Rect.makeLTRB(320f, 132f, 380f, 165f), paint.apply { color = 0xFF2B3A45.toInt() })
+        canvas.drawRect(Rect.makeLTRB(420f, 132f, 480f, 165f), paint.apply { color = 0xFF2B3A45.toInt() })
+        canvas.drawRect(Rect.makeLTRB(90f, 300f, 710f, 312f), paint.apply { color = 0xFFF2F2F2.toInt() })
+        for (x in listOf(170f, 250f, 550f, 630f)) canvas.drawCircle(x, 335f, 30f, paint.apply { color = 0xFF222222.toInt() })
+        return surface.makeImageSnapshot().encodeToData(EncodedImageFormat.PNG)!!.bytes
+    }
+
     private fun demoBackground(): ByteArray {
         val w = 1600
         val h = 1000

@@ -26,6 +26,20 @@ import kotlinx.coroutines.launch
 class VehicleRepository(private val store: VehicleStore?) {
     internal val fleet = MutableStateFlow(runCatching { store?.load() }.getOrNull() ?: Fleet())
 
+    private val images = HashMap<String, ByteArray?>()
+    internal val imageVersion = MutableStateFlow(0)
+
+    internal fun image(id: String): ByteArray? {
+        if (id !in images) images[id] = runCatching { store?.loadImage(id) }.getOrNull()
+        return images[id]
+    }
+
+    internal fun setImage(id: String, bytes: ByteArray?) {
+        store?.saveImage(id, bytes)
+        images[id] = bytes
+        imageVersion.value++
+    }
+
     internal fun change(transform: (Fleet) -> Fleet) {
         val next = transform(fleet.value)
         store?.save(next)
@@ -99,7 +113,10 @@ internal class VehicleServiceImpl(
         return loco
     }
 
-    override fun deleteLoco(id: String) = repository.change { f -> f.copy(locos = f.locos.filterNot { it.id == id }) }
+    override fun deleteLoco(id: String) {
+        repository.change { f -> f.copy(locos = f.locos.filterNot { it.id == id }) }
+        if (repository.image(id) != null) repository.setImage(id, null)
+    }
 
     override fun saveWagon(wagon: WagonClass): WagonClass {
         require(wagon.code.isNotBlank()) { "Bitte ein Gattungszeichen eingeben, z. B. Eaos." }
@@ -112,7 +129,19 @@ internal class VehicleServiceImpl(
         return wagon
     }
 
-    override fun deleteWagon(id: String) = repository.change { f -> f.copy(wagons = f.wagons.filterNot { it.id == id }) }
+    override fun deleteWagon(id: String) {
+        repository.change { f -> f.copy(wagons = f.wagons.filterNot { it.id == id }) }
+        if (repository.image(id) != null) repository.setImage(id, null)
+    }
+
+    override val imageVersion: StateFlow<Int> = repository.imageVersion
+
+    override fun image(id: String): ByteArray? = repository.image(id)
+
+    override fun setImage(id: String, bytes: ByteArray?) {
+        require(bytes == null || bytes.size <= VehicleService.MAX_IMAGE_BYTES) { "Das Bild ist zu groß (höchstens 8 MB)." }
+        repository.setImage(id, bytes)
+    }
 
     override fun newId(group: VehicleGroup): String {
         val prefix = VehicleModule.ID_PREFIX + when (group) {

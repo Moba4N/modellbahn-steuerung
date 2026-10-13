@@ -126,6 +126,12 @@ data class Fleet(
 interface VehicleStore {
     fun load(): Fleet?
     fun save(fleet: Fleet)
+
+    /** Foto eines Fahrzeugs (PNG, JPEG ...), `null` = keins. */
+    fun loadImage(id: String): ByteArray? = null
+
+    /** `null` loescht das Foto. */
+    fun saveImage(id: String, bytes: ByteArray?) = Unit
 }
 
 /**
@@ -150,6 +156,20 @@ interface VehicleService {
 
     /** Eine freie Id fuer einen neuen Eintrag. */
     fun newId(group: VehicleGroup): String
+
+    /** Foto eines Fahrzeugs, `null` = keins. */
+    fun image(id: String): ByteArray?
+
+    /** Setzt oder loescht (`null`) das Foto; wird sofort gespeichert. @throws IllegalArgumentException wenn zu gross */
+    fun setImage(id: String, bytes: ByteArray?)
+
+    /** Zaehlt bei jeder Bildaenderung hoch, damit Ansichten neu laden. */
+    val imageVersion: StateFlow<Int>
+
+    companion object {
+        /** Groesste erlaubte Bilddatei. */
+        const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    }
 }
 
 class VehicleLimitException(message: String) : Exception(message)

@@ -114,7 +114,7 @@ fun MobaShell(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wide = maxWidth >= WIDE_LAYOUT
-                CompositionLocalProvider(LocalWideLayout provides wide) {
+                CompositionLocalProvider(LocalWideLayout provides wide, LocalImagePicker provides imagePicker) {
                 Column(Modifier.fillMaxSize()) {
                     TopBar(
                         app,

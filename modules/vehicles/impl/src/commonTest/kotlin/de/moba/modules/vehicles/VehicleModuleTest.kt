@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -123,5 +124,19 @@ class VehicleModuleTest {
         assertFailsWith<IllegalArgumentException> { service.addLoco("", 3) }
         assertFailsWith<IllegalArgumentException> { service.addLoco("Null", 0) }
         assertFailsWith<IllegalArgumentException> { service.addWagon(VehicleGroup.FREIGHT, " ") }
+    }
+
+    @Test
+    fun photosAreStoredAndRemovedWithTheVehicle() = runTest {
+        val service = start(LicenseInfo.FREE)
+        val loco = service.saveLoco(LocoRecord(service.newId(VehicleGroup.LOCOS), "BR 218", 3))
+        assertNull(service.image(loco.id))
+        val version = service.imageVersion.value
+        service.setImage(loco.id, byteArrayOf(1, 2, 3))
+        assertContentEquals(byteArrayOf(1, 2, 3), service.image(loco.id))
+        assertTrue(service.imageVersion.value > version)
+        assertFailsWith<IllegalArgumentException> { service.setImage(loco.id, ByteArray(VehicleService.MAX_IMAGE_BYTES + 1)) }
+        service.deleteLoco(loco.id)
+        assertNull(service.image(loco.id))
     }
 }

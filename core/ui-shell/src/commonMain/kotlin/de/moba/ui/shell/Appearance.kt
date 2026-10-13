@@ -1,5 +1,6 @@
 package de.moba.ui.shell
 
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 
@@ -62,6 +63,9 @@ interface ImageStore {
 fun interface ImagePicker {
     fun pick(onResult: (ByteArray?) -> Unit)
 }
+
+/** Bildauswahl fuer Module (z. B. Fahrzeugfotos); `null`, wenn die Plattform keine anbietet. */
+val LocalImagePicker = compositionLocalOf<ImagePicker?> { null }
 
 /** Wandelt PNG, JPEG usw. in ein Bild fuer Compose; `null`, wenn die Datei kein lesbares Bild ist. */
 expect fun decodeImage(bytes: ByteArray): ImageBitmap?
