@@ -34,10 +34,19 @@ import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
 import de.moba.modules.trackplan.api.TrackPlanStore
 import de.moba.modules.trackplan.api.TrackShape
+import de.moba.modules.trackplan.api.TrackTile
 import de.moba.modules.trackplan.ui.EditTool
 import de.moba.modules.trackplan.ui.TrackPlanMode
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanUiState
+import de.moba.modules.symbols.SymbolModule
+import de.moba.modules.symbols.SymbolRepository
+import de.moba.modules.symbols.api.SignalCatalog
+import de.moba.modules.symbols.api.SignalSymbols
+import de.moba.modules.symbols.api.SymbolService
+import de.moba.modules.symbols.ui.SymbolsScreen
+import de.moba.modules.symbols.ui.SymbolsTab
+import de.moba.modules.symbols.ui.SymbolsUiState
 import de.moba.modules.vehicles.VehicleModule
 import de.moba.modules.vehicles.VehicleRepository
 import de.moba.modules.vehicles.api.Epoch
@@ -94,7 +103,7 @@ class ScreenshotTest {
         val app = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator) + StationCatalog.drivers.filter { it.id != "simulator" },
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null))) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null)), SymbolModule(SymbolRepository(null))) },
             licenseVerifier = EcLicenseVerifier(testKeys.second),
         )
         app.connect(StationConfig("simulator")).join()
@@ -132,7 +141,7 @@ class ScreenshotTest {
         val pro = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator),
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null))) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null)), SymbolModule(SymbolRepository(null))) },
             license = LicenseInfo.of("pro", "decoder"),
         )
         pro.connect(StationConfig("simulator")).join()
@@ -297,6 +306,69 @@ class ScreenshotTest {
             MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
         }
         ShellUiState.appearanceOpen.value = false
+
+        // Symbole: Pixel-Editor wie TrainController, Signalbilder der EU-Laender, Einsatz im Gleisbild
+        app.setDarkTheme(true)
+        pro.setDarkTheme(true)
+        val withSymbols = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen)
+        val proSymbols = pro.session.value!!.host.service(SymbolService::class)!!
+        val ks = SignalSymbols.toSymbol(SignalCatalog.system("de-ks")!!, proSymbols.newId())
+        proSymbols.update(ks)
+        SymbolsUiState.tab.value = SymbolsTab.OWN
+        SymbolsUiState.select("sym-1")
+        SymbolsUiState.stateIndex.value = 1
+        render("pc-symbole-editor-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
+        }
+        render("handy-symbole-editor-dunkel", 824, 1780, 2f) {
+            MobaShell(app, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
+        }
+        SymbolsUiState.select(ks.id)
+        SymbolsUiState.stateIndex.value = 1
+        render("pc-symbole-signal-pro-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
+        }
+        SymbolsUiState.tab.value = SymbolsTab.SIGNALS
+        for ((country, system) in listOf("DE" to "de-hv-hp", "DE" to "de-ks", "CH" to "ch-l-hs", "FR" to "fr-cible", "PL" to "pl-main", "SE" to "se-hs")) {
+            SymbolsUiState.country.value = country
+            SymbolsUiState.system.value = system
+            render("pc-signalbilder-$system-dunkel", 1440, 900, 1f) {
+                MobaShell(app, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
+            }
+        }
+        SymbolsUiState.country.value = "AT"
+        SymbolsUiState.system.value = null
+        render("handy-signalbilder-dunkel", 824, 1780, 2f) {
+            MobaShell(app, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
+        }
+        app.setDarkTheme(false)
+        SymbolsUiState.tab.value = SymbolsTab.OWN
+        SymbolsUiState.select("sym-2")
+        render("pc-symbole-editor-hell", 1440, 900, 1f) {
+            MobaShell(app, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
+        }
+
+        // Gleisbild mit Ks-Signalen und einer Bahnsteiglampe
+        val proPlansService = pro.session.value!!.host.service(TrackPlanService::class)!!
+        val main = proPlansService.plans.value.first()
+        var withSignals = main
+        main.tiles.filter { it.shape == TrackShape.SIGNAL }.forEach { withSignals = withSignals.put(it.copy(symbol = "signal:de-ks")) }
+        val free = (0 until main.width).first { x -> withSignals.tileAt(x, 0) == null }
+        withSignals = withSignals.put(TrackTile(free, 0, TrackShape.SYMBOL, symbol = "sym-1"))
+        proPlansService.update(withSignals)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        render("pc-gleisbild-signale-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withSymbols, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
+        TrackPlanUiState.editPlan.value = main.id
+        TrackPlanUiState.tool.value = EditTool.Select
+        TrackPlanUiState.selected.value = main.tiles.first { it.shape == TrackShape.SIGNAL }.let { it.x to it.y }
+        render("pc-gleisbild-signal-auswahl-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withSymbols, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.selected.value = null
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
 
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)

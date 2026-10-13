@@ -21,7 +21,7 @@ data class TrackSegment(val from: Int, val to: Int, val branch: Branch = Branch.
 enum class Branch { MAIN, LEFT, RIGHT }
 
 /** Was eine Kachel ausser Gleis noch traegt. */
-enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT }
+enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT, SYMBOL }
 
 /**
  * Alle Gleisformen des Gleisbilds. Die Segmente gelten fuer Drehung 0;
@@ -71,10 +71,11 @@ enum class TrackShape(val label: String, val kind: TileKind, val segments: List<
     FEEDBACK("Rückmelder", TileKind.FEEDBACK, listOf(TrackSegment(0, 4))),
     UNCOUPLER("Entkuppler", TileKind.UNCOUPLER, listOf(TrackSegment(0, 4))),
     TEXT("Text", TileKind.TEXT, emptyList()),
+    SYMBOL("Symbol", TileKind.SYMBOL, emptyList()),
     ;
 
-    /** Braucht eine Digitaladresse (Weichen, Signale, Entkuppler). */
-    val hasAddress: Boolean get() = kind == TileKind.TURNOUT || kind == TileKind.SIGNAL || kind == TileKind.UNCOUPLER
+    /** Braucht eine Digitaladresse (Weichen, Signale, Entkuppler); bei Symbolen schaltet sie den Zustand. */
+    val hasAddress: Boolean get() = kind == TileKind.TURNOUT || kind == TileKind.SIGNAL || kind == TileKind.UNCOUPLER || kind == TileKind.SYMBOL
 
     /** Dreiwegweichen brauchen zwei Adressen: [address] fuer links, [address] + 1 fuer rechts. */
     val addressCount: Int get() = if (this == TURNOUT_THREE_WAY) 2 else 1
@@ -85,6 +86,7 @@ enum class TrackShape(val label: String, val kind: TileKind, val segments: List<
 /**
  * Eine belegte Rasterzelle. [rotation] in 45-Grad-Schritten (0 bis 7).
  * [feedbackModule]/[feedbackContact] verbinden einen Rueckmelder mit s88-Modul und Kontakt.
+ * [symbol] verweist auf ein eigenes Symbol (Kennung) oder bei Signalen auf ein Signalsystem ("signal:<kennung>").
  */
 data class TrackTile(
     val x: Int,
@@ -95,6 +97,7 @@ data class TrackTile(
     val feedbackModule: Int? = null,
     val feedbackContact: Int? = null,
     val text: String = "",
+    val symbol: String = "",
 ) {
     fun segments() = shape.segments(rotation)
 }

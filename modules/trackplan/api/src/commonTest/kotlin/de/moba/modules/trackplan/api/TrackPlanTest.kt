@@ -48,6 +48,8 @@ class TrackPlanTest {
                     TrackTile(3, 4, TrackShape.TURNOUT_THREE_WAY, 2, address = 12),
                     TrackTile(5, 4, TrackShape.FEEDBACK, 6, feedbackModule = 2, feedbackContact = 16),
                     TrackTile(0, 0, TrackShape.TEXT, text = "Gleis 1 \\ 2"),
+                    TrackTile(7, 4, TrackShape.SIGNAL, 2, address = 5, symbol = "signal:de-ks"),
+                    TrackTile(8, 1, TrackShape.SYMBOL, address = 40, symbol = "sym-3"),
                 ),
             ),
             TrackPlan("b", "Leer"),
@@ -55,6 +57,14 @@ class TrackPlanTest {
         val back = TrackPlanCodec.decode(TrackPlanCodec.encode(plans))
         assertEquals(plans.map { it.copy(tiles = it.tiles.toSet().toList()) }.map { it.tiles.toSet() }, back.map { it.tiles.toSet() })
         assertEquals(plans.map { it.copy(tiles = emptyList()) }, back.map { it.copy(tiles = emptyList()) })
+    }
+
+    @Test
+    fun olderFilesWithoutSymbolStillLoad() {
+        val text = "MOBA-GLEISBILD 1\nplan\ta\tAlt\t10\t5\ntile\t1\t1\tSIGNAL\t2\t7\t\t\t\n"
+        val tile = TrackPlanCodec.decode(text).single().tiles.single()
+        assertEquals(7, tile.address)
+        assertEquals("", tile.symbol)
     }
 
     @Test

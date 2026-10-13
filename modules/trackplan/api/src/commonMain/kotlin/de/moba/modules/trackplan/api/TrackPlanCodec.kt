@@ -6,7 +6,7 @@ package de.moba.modules.trackplan.api
  * ```
  * MOBA-GLEISBILD 1
  * plan  <id>  <name>  <breite>  <hoehe>
- * tile  <x>  <y>  <FORM>  <drehung>  <adresse>  <s88-modul>  <s88-kontakt>  <text>
+ * tile  <x>  <y>  <FORM>  <drehung>  <adresse>  <s88-modul>  <s88-kontakt>  <text>  <symbol>
  * ```
  * Leere Felder stehen fuer "nicht gesetzt". Unbekannte Formen werden beim Lesen uebersprungen.
  */
@@ -21,7 +21,7 @@ object TrackPlanCodec {
                 appendLine(
                     listOf(
                         "tile", t.x, t.y, t.shape.name, t.rotation,
-                        t.address ?: "", t.feedbackModule ?: "", t.feedbackContact ?: "", escape(t.text),
+                        t.address ?: "", t.feedbackModule ?: "", t.feedbackContact ?: "", escape(t.text), escape(t.symbol),
                     ).joinToString("\t"),
                 )
             }
@@ -55,6 +55,7 @@ object TrackPlanCodec {
                             feedbackModule = f.getOrNull(6)?.toIntOrNull(),
                             feedbackContact = f.getOrNull(7)?.toIntOrNull(),
                             text = unescape(f.getOrNull(8).orEmpty()),
+                            symbol = unescape(f.getOrNull(9).orEmpty()),
                         ),
                     )
                 }

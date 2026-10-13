@@ -26,6 +26,7 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und 
 | `modules/vehicles` | Modul "Fahrzeuge": Loks, Gueterwagen- und Personenwagengattungen anlegen |
 | `modules/decoder` | Modul "Decoder": CV-Programmierung und Decoder-Datenbank |
 | `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
+| `modules/symbols` | Modul "Symbole": Pixel-Editor fuer eigene Symbole und Signalbilder der EU-Laender |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
 | `tools/sandbox` | Startet Kern, Simulator und Beispielmodule auf der Konsole |
@@ -123,7 +124,10 @@ An echter Hardware ist es noch nicht geprueft.
 
 Der Editor arbeitet auf einem Raster mit 45-Grad-Schritten. Gleisformen: Gerade, Kurve 45°, Bogen 90°,
 Weiche links/rechts, Y-Weiche, Dreiwegweiche, Kreuzung 90° und 45°, einfache und doppelte Kreuzungsweiche,
-Prellbock, Signal, Rueckmelder (s88-Modul und Kontakt), Entkuppler und Text.
+Prellbock, Signal, Rueckmelder (s88-Modul und Kontakt), Entkuppler, Text und Symbol.
+Einem Signal laesst sich ein Signalbild aus dem Katalog oder ein eigenes Signalsymbol zuweisen; es zeigt dann
+im Betrieb Halt bzw. Fahrt. Eine Symbolkachel zeigt ein eigenes Symbol, mit Schaltadresse wechselt sie zwischen
+erstem (aus) und zweitem Zustand (an).
 Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelder leuchten orange.
 
 | | Kostenlos | Basis | Pro / Club |
@@ -135,6 +139,26 @@ Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelde
 Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn-steuerung`,
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
+
+## Symbole
+
+Der Symbol-Editor arbeitet wie in TrainController: quadratische Pixelbilder (16, 24, 32 oder 48 Pixel)
+mit mehreren Zustaenden, z. B. "aus" und "an" oder je Signalbild einer. Werkzeuge: Stift, Radierer, Linie,
+Rechteck, Ellipse (je offen und gefuellt), Flaeche fuellen, Farbe aufnehmen; dazu Spiegeln, Drehen,
+Verschieben, Rueckgaengig/Wiederholen, Palette mit Signalfarben und eigene Farbe als Hex-Wert.
+
+Unter "Signalbilder EU" stehen 47 Signalsysteme aus allen EU-Laendern mit Eisenbahn und der Schweiz
+(Zypern und Malta haben kein Bahnnetz). Jedes System laesst sich als eigenes Symbol uebernehmen und weiter anpassen.
+Farben und Bedeutungen folgen den Signalbuechern; die Lampenanordnung ist vereinfacht und fuer
+AT, LU, IE, ES, PT, GR, CZ, SK, HU, EE, LV, LT, BG, RO, HR, SI und DK noch nicht anhand von Vorbildfotos geprueft
+(in der App markiert). Die Daten stehen in `modules/symbols/api/.../SignalData.kt`.
+
+| | Kostenlos | Basis | Pro / Club |
+|---|---|---|---|
+| Symbole zeichnen, Signalbilder nutzen | ja | ja | ja |
+| Eigene Symbole speichern | nein | nein | ja |
+
+Die Symbole liegen in `symbole.txt` neben den Gleisbildern.
 
 ## Erscheinungsbild
 

@@ -36,6 +36,8 @@ include(
     ":modules:vehicles:impl",
     ":modules:decoder:api",
     ":modules:decoder:impl",
+    ":modules:symbols:api",
+    ":modules:symbols:impl",
     ":tools:sandbox",
     ":tools:license",
 )
@@ -49,6 +51,7 @@ if (providers.gradleProperty("moba.apps").getOrElse("true").toBoolean()) {
         ":modules:trackplan:ui",
         ":modules:vehicles:ui",
         ":modules:decoder:ui",
+        ":modules:symbols:ui",
         ":apps:desktop",
         ":apps:android",
     )

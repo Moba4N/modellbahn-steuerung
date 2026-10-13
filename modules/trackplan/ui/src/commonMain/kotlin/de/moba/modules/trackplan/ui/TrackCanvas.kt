@@ -31,6 +31,8 @@ import de.moba.modules.trackplan.api.TrackDir
 import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackTile
 import de.moba.modules.trackplan.api.activeBranch
+import de.moba.modules.symbols.api.PixelImage
+import de.moba.modules.symbols.ui.drawPixels
 import de.moba.ui.shell.Moba
 import kotlin.math.sqrt
 
@@ -75,6 +77,8 @@ internal class TrackState(
     val occupied: Set<Pair<Int, Int>> = emptySet(),
     /** Im Betrieb wird der nicht befahrene Weichenstrang abgeblendet, im Editor nicht. */
     val operating: Boolean = false,
+    /** Bild fuer Signal- und Symbolkacheln mit gewaehltem Symbol, sonst null. */
+    val symbolImage: (TrackTile) -> PixelImage? = { null },
 )
 
 /**
@@ -127,11 +131,11 @@ internal fun TrackPlanView(
 
 /** Kleine Vorschau einer Gleisform fuer die Palette. */
 @Composable
-internal fun ShapePreview(tile: TrackTile, size: Dp) {
+internal fun ShapePreview(tile: TrackTile, size: Dp, state: TrackState = TrackState()) {
     val colors = trackColors()
     val measurer = rememberTextMeasurer()
     Canvas(Modifier.size(size)) {
-        drawTile(tile.copy(x = 0, y = 0), 0f, 0f, this.size.width, colors, TrackState(), measurer)
+        drawTile(tile.copy(x = 0, y = 0), 0f, 0f, this.size.width, colors, state, measurer)
     }
 }
 
@@ -160,6 +164,22 @@ internal fun DrawScope.drawTile(
             drawText(layout, topLeft = Offset(left + cell * 0.1f, c.y - layout.size.height / 2f))
         } else {
             drawRoundRect(colors.dimmed, Offset(left + cell * 0.2f, top + cell * 0.35f), Size(cell * 0.6f, cell * 0.3f), CornerRadius(cell * 0.05f))
+        }
+        return
+    }
+    val image = state.symbolImage(tile)
+    if (kind == TileKind.SYMBOL) {
+        if (image != null) {
+            drawPixels(image, origin = Offset(left, top), side = cell)
+        } else {
+            drawRoundRect(
+                colors.dimmed,
+                Offset(left + cell * 0.15f, top + cell * 0.15f),
+                Size(cell * 0.7f, cell * 0.7f),
+                CornerRadius(cell * 0.1f),
+                style = Stroke(width = (cell * 0.06f).coerceAtLeast(1f)),
+            )
+            drawCircle(colors.dimmed, cell * 0.12f, c)
         }
         return
     }
@@ -226,7 +246,12 @@ internal fun DrawScope.drawTile(
                 style = Stroke(width = width * 0.5f),
             )
         }
-        TileKind.SIGNAL -> {
+        TileKind.SIGNAL -> if (image != null) {
+            // Gewaehltes Signalbild neben dem Gleis, immer aufrecht
+            val side = cell * 0.62f
+            val center = c + across * (cell * 0.28f)
+            drawPixels(image, origin = Offset(center.x - side / 2, center.y - side / 2), side = side)
+        } else {
             val lamp = when (tile.address?.let { state.turnouts[it] }) {
                 true -> colors.signalRed
                 false -> colors.signalGreen

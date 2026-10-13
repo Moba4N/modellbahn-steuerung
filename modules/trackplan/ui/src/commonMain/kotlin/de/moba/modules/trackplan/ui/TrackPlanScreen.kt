@@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +76,7 @@ import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
 import de.moba.modules.trackplan.api.TrackShape
 import de.moba.modules.trackplan.api.TrackTile
+import de.moba.modules.symbols.api.SymbolService
 import de.moba.ui.shell.LocalWideLayout
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
@@ -117,32 +119,36 @@ object TrackPlanScreen : ModuleScreen {
     override fun Content(app: MobaApp) {
         val session by app.session.collectAsState()
         val service = session?.host?.service(TrackPlanService::class) ?: return
+        val symbolService = session?.host?.service(SymbolService::class)
+        val library = symbolService?.symbols?.collectAsState()?.value.orEmpty()
         val mode by TrackPlanUiState.mode.collectAsState()
         val message by TrackPlanUiState.message.collectAsState()
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModeChip("Betrieb", Icons.Filled.PlayArrow, mode == TrackPlanMode.BETRIEB) {
-                    TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
-                    TrackPlanUiState.message.value = null
+        CompositionLocalProvider(LocalSymbolLibrary provides library) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModeChip("Betrieb", Icons.Filled.PlayArrow, mode == TrackPlanMode.BETRIEB) {
+                        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+                        TrackPlanUiState.message.value = null
+                    }
+                    ModeChip("Bearbeiten", Icons.Filled.Edit, mode == TrackPlanMode.BEARBEITEN) {
+                        TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
+                        TrackPlanUiState.message.value = null
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    message?.let {
+                        Text(
+                            it,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
-                ModeChip("Bearbeiten", Icons.Filled.Edit, mode == TrackPlanMode.BEARBEITEN) {
-                    TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
-                    TrackPlanUiState.message.value = null
+                when (mode) {
+                    TrackPlanMode.BETRIEB -> OperationView(service)
+                    TrackPlanMode.BEARBEITEN -> EditorView(service)
                 }
-                Spacer(Modifier.width(8.dp))
-                message?.let {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            when (mode) {
-                TrackPlanMode.BETRIEB -> OperationView(service)
-                TrackPlanMode.BEARBEITEN -> EditorView(service)
             }
         }
     }
@@ -172,7 +178,8 @@ private fun ColumnScope.OperationView(service: TrackPlanService) {
     val turnouts by service.turnouts.collectAsState()
     val occupied by service.occupied.collectAsState()
     val scope = rememberCoroutineScope()
-    val state = TrackState(turnouts, occupied, operating = true)
+    val library = LocalSymbolLibrary.current
+    val state = TrackState(turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, library) })
     val wide = LocalWideLayout.current
 
     FlowRow(
@@ -500,6 +507,9 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
     val selected by TrackPlanUiState.selected.collectAsState()
     val cellSize by TrackPlanUiState.cellSize.collectAsState()
 
+    val library = LocalSymbolLibrary.current
+    val editorState = TrackState(symbolImage = { symbolImage(it, emptyMap(), library) })
+
     fun tap(x: Int, y: Int) {
         val tile = plan.tileAt(x, y)
         when (val t = tool) {
@@ -518,7 +528,8 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
                     service.update(plan.rotate(x, y))
                 } else {
                     val rot = if (t.shape == TrackShape.TEXT) 0 else rotation
-                    service.update(plan.put(TrackTile(x, y, t.shape, rot, text = if (t.shape == TrackShape.TEXT) "Text" else "")))
+                    val symbol = if (t.shape == TrackShape.SYMBOL) library.firstOrNull()?.id.orEmpty() else ""
+                    service.update(plan.put(TrackTile(x, y, t.shape, rot, text = if (t.shape == TrackShape.TEXT) "Text" else "", symbol = symbol)))
                 }
                 TrackPlanUiState.selected.value = x to y
             }
@@ -540,7 +551,7 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())
                 .padding(12.dp),
         ) {
-            TrackPlanView(plan, cell.dp, TrackState(), selected = selected, showGrid = true, onTap = ::tap)
+            TrackPlanView(plan, cell.dp, editorState, selected = selected, showGrid = true, onTap = ::tap)
         }
         Surface(
             Modifier.align(Alignment.BottomEnd).padding(10.dp),
@@ -616,7 +627,8 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                ShapePreview(tile, 32.dp)
+                val library = LocalSymbolLibrary.current
+                ShapePreview(tile, 32.dp, TrackState(symbolImage = { symbolImage(it, emptyMap(), library) }))
                 Column {
                     Text(tile.shape.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(
@@ -625,7 +637,7 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (tile.shape != TrackShape.TEXT) {
+                if (tile.shape != TrackShape.TEXT && tile.shape != TrackShape.SYMBOL) {
                     IconButton(onClick = { set(tile.copy(rotation = (tile.rotation - 1).mod(8))) }) {
                         Icon(Icons.Outlined.Rotate90DegreesCcw, "Links drehen")
                     }
@@ -633,8 +645,12 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                         Icon(Icons.Outlined.Rotate90DegreesCw, "Rechts drehen")
                     }
                 }
+                if (tile.shape.kind == TileKind.SIGNAL || tile.shape.kind == TileKind.SYMBOL) {
+                    SymbolChooser(tile) { set(tile.copy(symbol = it)) }
+                }
                 if (tile.shape.hasAddress) {
                     val label = when {
+                        tile.shape.kind == TileKind.SYMBOL -> "Schaltadresse (optional)"
                         tile.shape.addressCount == 2 -> "Adresse (links, rechts = +1)"
                         tile.shape.kind == TileKind.SIGNAL -> "Signaladresse"
                         tile.shape.kind == TileKind.UNCOUPLER -> "Entkuppler-Adresse"

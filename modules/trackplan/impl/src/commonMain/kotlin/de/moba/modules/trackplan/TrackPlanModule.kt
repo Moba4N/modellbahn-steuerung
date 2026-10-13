@@ -169,6 +169,8 @@ internal class TrackPlanServiceImpl(
             }
             // Signale: abzweigend = Halt (rot), gerade = Fahrt (gruen)
             TileKind.SIGNAL -> station.setTurnout(address, thrown = _turnouts.value[address] == false)
+            // Symbole: an/aus umschalten (Zustand 1 bzw. 0)
+            TileKind.SYMBOL -> station.setTurnout(address, thrown = _turnouts.value[address] != true)
             TileKind.UNCOUPLER -> {
                 station.setTurnout(address, thrown = true)
                 delay(TrackPlanModule.UNCOUPLER_PULSE_MILLIS)
