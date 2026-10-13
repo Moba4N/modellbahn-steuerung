@@ -37,6 +37,7 @@ include(
     ":modules:decoder:api",
     ":modules:decoder:impl",
     ":tools:sandbox",
+    ":tools:license",
 )
 
 // Oberflaeche und Apps brauchen Compose und das Android SDK.

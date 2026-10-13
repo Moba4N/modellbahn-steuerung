@@ -2,7 +2,11 @@ package de.moba.ui.shell
 
 import androidx.compose.ui.graphics.ImageBitmap
 import de.moba.core.model.InMemoryLayoutRepository
+import de.moba.core.runtime.License
+import de.moba.core.runtime.LicenseCheck
 import de.moba.core.runtime.LicenseInfo
+import de.moba.core.runtime.LicenseVerifier
+import de.moba.core.runtime.plus
 import de.moba.core.runtime.MobaModule
 import de.moba.core.runtime.ModuleHost
 import de.moba.core.station.CommandStation
@@ -61,6 +65,8 @@ class MobaApp(
     private val license: LicenseInfo = LicenseInfo.FREE,
     private val settings: SettingsStore = SettingsStore.InMemory(),
     private val imageStore: ImageStore = ImageStore.InMemory(),
+    /** Prueft eingegebene Lizenzschluessel; `null` = keine Eingabe moeglich (z. B. in Tests). */
+    private val licenseVerifier: LicenseVerifier? = null,
 ) {
     val layout = InMemoryLayoutRepository()
 
@@ -87,6 +93,44 @@ class MobaApp(
         _darkTheme.value = dark
         settings.set(KEY_THEME, if (dark) "dark" else "light")
     }
+
+    private val _activeLicense = MutableStateFlow(
+        settings.get(KEY_LICENSE)?.let { key -> (licenseVerifier?.check(key, today()) as? LicenseCheck.Valid)?.license },
+    )
+
+    /** Die eingegebene gueltige Lizenz; `null` = kostenlose Version. */
+    val activeLicense: StateFlow<License?> = _activeLicense
+
+    val canEnterLicense: Boolean get() = licenseVerifier != null
+
+    /**
+     * Prueft und speichert einen Lizenzschluessel. Die Module starten danach mit den neuen Freischaltungen neu.
+     * @return Fehlermeldung oder `null`, wenn die Lizenz aktiv ist.
+     */
+    fun activateLicense(key: String): String? {
+        val verifier = licenseVerifier ?: return "Lizenzen können in dieser Version nicht eingegeben werden."
+        return when (val check = verifier.check(key, today())) {
+            is LicenseCheck.Invalid -> check.reason
+            is LicenseCheck.Valid -> {
+                settings.set(KEY_LICENSE, key.filterNot { it.isWhitespace() })
+                _activeLicense.value = check.license
+                restartModules()
+                null
+            }
+        }
+    }
+
+    fun removeLicense() {
+        settings.set(KEY_LICENSE, "")
+        _activeLicense.value = null
+        restartModules()
+    }
+
+    private fun restartModules() {
+        _session.value?.config?.let { connect(it) }
+    }
+
+    private fun today(): String = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
 
     private val _appearance = MutableStateFlow(
         Appearance(
@@ -191,7 +235,7 @@ class MobaApp(
             config.options.forEach { (key, value) -> settings.set("$KEY_OPTION$key", value) }
 
             val station = driver.create(config)
-            val host = ModuleHost(station, layout, license, scope).apply { moduleFactory().forEach(::register) }
+            val host = ModuleHost(station, layout, license.plus(_activeLicense.value), scope).apply { moduleFactory().forEach(::register) }
             // Sofort abonnieren, sonst geht die Verbindungsmeldung beim Verbinden verloren.
             eventJob = scope.launch(start = CoroutineStart.UNDISPATCHED) { station.events.collect(::onStationEvent) }
             _session.value = Session(config, driver, station, host)
@@ -255,6 +299,7 @@ class MobaApp(
         const val KEY_MODEL = "station.model"
         const val KEY_OPTION = "station.option."
         const val KEY_THEME = "ui.theme"
+        const val KEY_LICENSE = "license.key"
         const val KEY_STYLE = "ui.style"
         const val KEY_FONT = "ui.font"
         const val KEY_TEXT_SIZE = "ui.textSize"

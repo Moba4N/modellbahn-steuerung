@@ -22,6 +22,8 @@ import de.moba.modules.vehicles.FileVehicleStore
 import de.moba.modules.vehicles.VehicleModule
 import de.moba.modules.vehicles.VehicleRepository
 import de.moba.modules.vehicles.ui.VehiclesScreen
+import de.moba.core.runtime.EcLicenseVerifier
+import de.moba.core.runtime.ManufacturerKey
 import de.moba.ui.shell.ImagePicker
 import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
@@ -84,6 +86,7 @@ fun main() = application {
                 moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders)) },
                 settings = DesktopSettings,
                 imageStore = DesktopImageStore,
+                licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
             ).also { it.start() }
         }
         val picker = remember { imagePicker(window) }

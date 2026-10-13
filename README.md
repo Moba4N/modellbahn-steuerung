@@ -146,6 +146,19 @@ Dort lassen sich kostenlos einstellen:
 - eigenes Hintergrundbild als Wasserzeichen in drei Staerken. Das Bild wird als Kopie
   `hintergrund.bild` im Datenordner gespeichert.
 
+## Lizenzen
+
+Ohne Lizenz laeuft die kostenlose Version. Freischaltungen: `pro`, `decoder` (Decoder-Datenbank), `club` (alles).
+Ein Lizenzschluessel (`MOBA1-...`) ist mit ECDSA P-256 unterschrieben und wird in der App ohne Internet
+mit dem oeffentlichen Schluessel in `ManufacturerKey.kt` geprueft. Eingabe: Burger-Menue, "Lizenz ...".
+
+Den privaten Schluessel gibt es nur ausserhalb des Repositorys. Lizenzen erstellen:
+
+```
+./gradlew :tools:license:run --args="erstellen --privat /pfad/privat.key --name 'Max Mustermann' --module pro --bis 2027-12-31"
+./gradlew :tools:license:run --args="pruefen MOBA1-..."
+```
+
 ## Naechste Schritte
 
 - s88-Zuordnung an der YD7001 pruefen; falls noetig LocoNet-Adapter

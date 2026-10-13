@@ -8,7 +8,10 @@ import androidx.compose.ui.unit.Density
 import de.moba.adapters.catalog.StationCatalog
 import de.moba.adapters.simulator.SimulatorStation
 import de.moba.core.model.Loco
+import de.moba.core.runtime.EcLicenseVerifier
+import de.moba.core.runtime.License
 import de.moba.core.runtime.LicenseInfo
+import de.moba.core.runtime.LicenseSigner
 import de.moba.core.station.Direction
 import de.moba.core.station.StationConfig
 import de.moba.core.station.StationDriver
@@ -82,6 +85,9 @@ class ScreenshotTest {
         override fun create(config: StationConfig) = SimulatorStation(name = "YaMoRC YD7001 (Simulator)")
     }
 
+    private val testKeys = LicenseSigner.generateKeyPair()
+    private val testSigner = LicenseSigner(testKeys.first)
+
     @Test
     fun renderScreens() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -89,6 +95,7 @@ class ScreenshotTest {
             scope = scope,
             drivers = listOf(namedSimulator) + StationCatalog.drivers.filter { it.id != "simulator" },
             moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null))) },
+            licenseVerifier = EcLicenseVerifier(testKeys.second),
         )
         app.connect(StationConfig("simulator")).join()
         val session = app.session.value!!
@@ -290,6 +297,19 @@ class ScreenshotTest {
             MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
         }
         ShellUiState.appearanceOpen.value = false
+
+        // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
+        app.setDarkTheme(true)
+        ShellUiState.licenseOpen.value = true
+        render("pc-lizenz-kostenlos-dunkel", 1440, 900, 1f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
+        val key = testSigner.sign(License("L-20261013-4711", "Max Mustermann", setOf("pro", "decoder"), "2026-10-13"))
+        assertTrue(app.activateLicense(key) == null)
+        delay(300)
+        render("pc-lizenz-pro-dunkel", 1440, 900, 1f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
+        app.setDarkTheme(false)
+        render("handy-lizenz-pro-hell", 824, 1780, 2f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
+        ShellUiState.licenseOpen.value = false
+        render("pc-uebersicht-lizenz-hell", 1440, 900, 1f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
 
         scope.cancel()
         assertTrue(File(outDir, "pc-fahren-dunkel.png").length() > 0)

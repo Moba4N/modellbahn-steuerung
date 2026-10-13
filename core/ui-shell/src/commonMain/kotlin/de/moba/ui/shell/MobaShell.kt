@@ -1,6 +1,7 @@
 package de.moba.ui.shell
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.LocalContentColor
@@ -72,6 +73,9 @@ object ShellUiState {
 
     /** Dialog "Erscheinungsbild" offen. */
     val appearanceOpen = MutableStateFlow(false)
+
+    /** Dialog "Lizenz" offen. */
+    val licenseOpen = MutableStateFlow(false)
 }
 
 /** true, wenn die rechte Leiste (z. B. Fahrpult) sichtbar ist. Module zeigen ihre Inhalte sonst selbst an. */
@@ -96,6 +100,7 @@ fun MobaShell(
     val appearance by app.appearance.collectAsState()
     val background by app.backgroundImage.collectAsState()
     val appearanceOpen by ShellUiState.appearanceOpen.collectAsState()
+    val licenseOpen by ShellUiState.licenseOpen.collectAsState()
     val session by app.session.collectAsState()
     val emptyStatus = remember { MutableStateFlow(emptyMap<String, ModuleStatus>()) }
     val modules by (session?.host?.status ?: emptyStatus).collectAsState()
@@ -189,6 +194,9 @@ fun MobaShell(
             }
             if (appearanceOpen) {
                 AppearanceDialog(app, imagePicker, onDismiss = { ShellUiState.appearanceOpen.value = false })
+            }
+            if (licenseOpen) {
+                LicenseDialog(app, onDismiss = { ShellUiState.licenseOpen.value = false })
             }
         }
     }
@@ -316,6 +324,18 @@ private fun BurgerMenu(
                 onClick = {
                     close()
                     ShellUiState.appearanceOpen.value = true
+                },
+            )
+            val license by app.activeLicense.collectAsState()
+            DropdownMenuItem(
+                text = { Text("Lizenz …") },
+                leadingIcon = { Icon(Icons.Outlined.Key, null) },
+                trailingIcon = {
+                    Text(editionLabel(license), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+                onClick = {
+                    close()
+                    ShellUiState.licenseOpen.value = true
                 },
             )
             DropdownMenuItem(

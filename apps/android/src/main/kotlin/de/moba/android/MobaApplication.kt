@@ -13,6 +13,8 @@ import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.vehicles.FileVehicleStore
 import de.moba.modules.vehicles.VehicleModule
 import de.moba.modules.vehicles.VehicleRepository
+import de.moba.core.runtime.EcLicenseVerifier
+import de.moba.core.runtime.ManufacturerKey
 import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.SettingsStore
@@ -44,6 +46,7 @@ class MobaApplication : Application() {
                     if (bytes == null) file.delete() else file.writeBytes(bytes)
                 }
             },
+            licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
         ).also { it.start() }
     }
 }
