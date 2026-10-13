@@ -1,5 +1,6 @@
 package de.moba.ui.shell
 
+import androidx.compose.ui.graphics.ImageBitmap
 import de.moba.core.model.InMemoryLayoutRepository
 import de.moba.core.runtime.LicenseInfo
 import de.moba.core.runtime.MobaModule
@@ -59,6 +60,7 @@ class MobaApp(
     private val moduleFactory: () -> List<MobaModule>,
     private val license: LicenseInfo = LicenseInfo.FREE,
     private val settings: SettingsStore = SettingsStore.InMemory(),
+    private val imageStore: ImageStore = ImageStore.InMemory(),
 ) {
     val layout = InMemoryLayoutRepository()
 
@@ -85,6 +87,40 @@ class MobaApp(
         _darkTheme.value = dark
         settings.set(KEY_THEME, if (dark) "dark" else "light")
     }
+
+    private val _appearance = MutableStateFlow(
+        Appearance(
+            style = enumSetting(KEY_STYLE, DesignStyle.MODERN),
+            font = enumSetting(KEY_FONT, FontChoice.STANDARD),
+            textSize = enumSetting(KEY_TEXT_SIZE, TextSize.NORMAL),
+            watermark = enumSetting(KEY_WATERMARK, WatermarkStrength.MEDIUM),
+        ),
+    )
+    val appearance: StateFlow<Appearance> = _appearance
+
+    fun setAppearance(appearance: Appearance) {
+        _appearance.value = appearance
+        settings.set(KEY_STYLE, appearance.style.name)
+        settings.set(KEY_FONT, appearance.font.name)
+        settings.set(KEY_TEXT_SIZE, appearance.textSize.name)
+        settings.set(KEY_WATERMARK, appearance.watermark.name)
+    }
+
+    private val _backgroundImage = MutableStateFlow(imageStore.load()?.let(::decodeImage))
+
+    /** Eigenes Bild, das als Wasserzeichen hinter den Ansichten liegt; `null` = keins. */
+    val backgroundImage: StateFlow<ImageBitmap?> = _backgroundImage
+
+    /** Setzt das Hintergrundbild. @return false, wenn die Datei kein lesbares Bild ist. */
+    fun setBackgroundImage(bytes: ByteArray?): Boolean {
+        val image = bytes?.let { decodeImage(it) ?: return false }
+        imageStore.save(bytes)
+        _backgroundImage.value = image
+        return true
+    }
+
+    private inline fun <reified E : Enum<E>> enumSetting(key: String, default: E): E =
+        settings.get(key)?.let { value -> enumValues<E>().firstOrNull { it.name == value } } ?: default
 
     private val _found = MutableStateFlow<List<FoundStation>>(emptyList())
 
@@ -219,6 +255,10 @@ class MobaApp(
         const val KEY_MODEL = "station.model"
         const val KEY_OPTION = "station.option."
         const val KEY_THEME = "ui.theme"
+        const val KEY_STYLE = "ui.style"
+        const val KEY_FONT = "ui.font"
+        const val KEY_TEXT_SIZE = "ui.textSize"
+        const val KEY_WATERMARK = "ui.watermark"
         const val LOG_SIZE = 30
     }
 }

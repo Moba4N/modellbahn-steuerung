@@ -22,9 +22,12 @@ import de.moba.modules.vehicles.FileVehicleStore
 import de.moba.modules.vehicles.VehicleModule
 import de.moba.modules.vehicles.VehicleRepository
 import de.moba.modules.vehicles.ui.VehiclesScreen
+import de.moba.ui.shell.ImagePicker
+import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.SettingsStore
+import java.awt.FileDialog
 import java.io.File
 import java.util.prefs.Preferences
 
@@ -41,6 +44,31 @@ private val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dataDir, "g
 private val vehicles = VehicleRepository(FileVehicleStore(File(dataDir, "fahrzeuge.txt")))
 private val decoders = DecoderRepository(FileDecoderStore(File(dataDir, "decoder.txt")))
 
+/** Hintergrundbild als Kopie im Datenordner, damit es auch nach Verschieben des Originals bleibt. */
+private object DesktopImageStore : ImageStore {
+    private val file = File(dataDir, "hintergrund.bild")
+    override fun load(): ByteArray? = file.takeIf { it.isFile }?.readBytes()
+    override fun save(bytes: ByteArray?) {
+        if (bytes == null) {
+            file.delete()
+        } else {
+            dataDir.mkdirs()
+            file.writeBytes(bytes)
+        }
+    }
+}
+
+/** Windows-Dateidialog fuer Bilder. */
+private fun imagePicker(window: java.awt.Frame) = ImagePicker { onResult ->
+    val dialog = FileDialog(window, "Hintergrundbild wählen", FileDialog.LOAD).apply {
+        setFilenameFilter { _, name -> name.substringAfterLast('.').lowercase() in setOf("png", "jpg", "jpeg", "bmp", "gif", "webp") }
+        file = "*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp"
+        isVisible = true
+    }
+    val chosen = dialog.files.firstOrNull()
+    onResult(chosen?.readBytes())
+}
+
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
@@ -55,8 +83,15 @@ fun main() = application {
                 discovery = StationCatalog.discovery,
                 moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders)) },
                 settings = DesktopSettings,
+                imageStore = DesktopImageStore,
             ).also { it.start() }
         }
-        MobaShell(app, screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen), panels = listOf(DrivingPanel))
+        val picker = remember { imagePicker(window) }
+        MobaShell(
+            app,
+            screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen),
+            panels = listOf(DrivingPanel),
+            imagePicker = picker,
+        )
     }
 }

@@ -47,8 +47,14 @@ import de.moba.modules.vehicles.api.WagonClass
 import de.moba.modules.vehicles.ui.VehicleDraft
 import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.modules.vehicles.ui.VehiclesUiState
+import de.moba.ui.shell.Appearance
+import de.moba.ui.shell.DesignStyle
+import de.moba.ui.shell.FontChoice
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
+import de.moba.ui.shell.ShellUiState
+import de.moba.ui.shell.TextSize
+import de.moba.ui.shell.WatermarkStrength
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -59,6 +65,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Paint
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.Shader
+import org.jetbrains.skia.Surface
 
 /**
  * Rendert die Oberflaeche ohne Bildschirm und speichert PNGs (PC und Handy, hell und dunkel).
@@ -234,8 +244,90 @@ class ScreenshotTest {
                 MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DecoderScreen.moduleId)
             }
         }
+
+        // Erscheinungsbild: Designs, Schrift, Hintergrundbild als Wasserzeichen, Burger-Menue
+        val withDecoder = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        app.setDarkTheme(true)
+        ShellUiState.menuOpen.value = true
+        render("pc-menue-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        render("handy-menue-dunkel", 824, 1780, 2f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        ShellUiState.menuOpen.value = false
+        assertTrue(app.setBackgroundImage(demoBackground()))
+        for ((style, dark) in listOf(DesignStyle.WINDOWS11 to true, DesignStyle.WINDOWS11 to false, DesignStyle.STELLWERK to true, DesignStyle.STELLWERK to false)) {
+            app.setDarkTheme(dark)
+            app.setAppearance(Appearance(style = style))
+            val name = "${style.name.lowercase()}-${if (dark) "dunkel" else "hell"}"
+            render("pc-design-$name", 1440, 900, 1f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+            }
+            render("pc-design-gleisbild-$name", 1440, 900, 1f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+            }
+            render("handy-design-$name", 824, 1780, 2f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel))
+            }
+        }
+        app.setDarkTheme(true)
+        app.setAppearance(Appearance(style = DesignStyle.WINDOWS11, font = FontChoice.SERIF, textSize = TextSize.LARGE, watermark = WatermarkStrength.STRONG))
+        render("pc-design-schrift-serifen", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+        }
+        app.setAppearance(Appearance())
+        ShellUiState.appearanceOpen.value = true
+        render("pc-erscheinungsbild-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
+        }
+        render("handy-erscheinungsbild-dunkel", 824, 1780, 2f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
+        }
+        app.setDarkTheme(false)
+        render("pc-erscheinungsbild-hell", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
+        }
+        ShellUiState.appearanceOpen.value = false
+
         scope.cancel()
         assertTrue(File(outDir, "pc-fahren-dunkel.png").length() > 0)
+    }
+
+    /** Beispielfoto fuer das Wasserzeichen: Abendhimmel mit Gleisen in Fluchtperspektive. */
+    private fun demoBackground(): ByteArray {
+        val w = 1600
+        val h = 1000
+        val surface = Surface.makeRasterN32Premul(w, h)
+        val canvas = surface.canvas
+        canvas.drawRect(
+            Rect.makeWH(w.toFloat(), h.toFloat()),
+            Paint().apply {
+                shader = Shader.makeLinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(0xFF2B5876.toInt(), 0xFFE0A96D.toInt(), 0xFF3B2F2F.toInt()))
+            },
+        )
+        val rail = Paint().apply {
+            color = 0xFF1A1A1A.toInt()
+            strokeWidth = 14f
+            isAntiAlias = true
+        }
+        val horizon = h * 0.45f
+        val vanish = w / 2f
+        // Schwellen
+        var y = horizon + 8f
+        while (y < h) {
+            val t = (y - horizon) / (h - horizon)
+            canvas.drawLine(vanish - 40f - t * 700f, y, vanish + 40f + t * 700f, y, rail.apply { strokeWidth = 4f + t * 18f })
+            y += 10f + t * 60f
+        }
+        rail.strokeWidth = 12f
+        canvas.drawLine(vanish - 20f, horizon, vanish - 520f, h.toFloat(), rail)
+        canvas.drawLine(vanish + 20f, horizon, vanish + 520f, h.toFloat(), rail)
+        // Signalmast
+        canvas.drawLine(w * 0.78f, h * 0.2f, w * 0.78f, h * 0.75f, rail.apply { strokeWidth = 18f })
+        canvas.drawCircle(w * 0.78f, h * 0.22f, 34f, Paint().apply { color = 0xFFE53935.toInt(); isAntiAlias = true })
+        return surface.makeImageSnapshot().encodeToData(EncodedImageFormat.PNG)!!.bytes
     }
 
     private suspend fun render(

@@ -136,6 +136,16 @@ Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
 
+## Erscheinungsbild
+
+Das Burger-Menue oben neben "Gleis an/aus" wechselt die Ansicht und oeffnet "Erscheinungsbild".
+Dort lassen sich kostenlos einstellen:
+
+- Design: Modern, Windows 11 (Fluent-Farben, kleine Ecken) oder Stellwerk, jeweils hell oder dunkel
+- Schriftart (Standard, Serifenlos, Serifen, Schreibmaschine) und Schriftgroesse
+- eigenes Hintergrundbild als Wasserzeichen in drei Staerken. Das Bild wird als Kopie
+  `hintergrund.bild` im Datenordner gespeichert.
+
 ## Naechste Schritte
 
 - s88-Zuordnung an der YD7001 pruefen; falls noetig LocoNet-Adapter

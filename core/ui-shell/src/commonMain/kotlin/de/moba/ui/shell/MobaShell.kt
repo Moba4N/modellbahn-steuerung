@@ -1,6 +1,16 @@
 package de.moba.ui.shell
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -55,6 +65,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 private const val OVERVIEW = "overview"
 
+/** Zustand des App-Rahmens, von aussen setzbar (z. B. fuer Vorschaubilder). */
+object ShellUiState {
+    /** Burger-Menue oben rechts aufgeklappt. */
+    val menuOpen = MutableStateFlow(false)
+
+    /** Dialog "Erscheinungsbild" offen. */
+    val appearanceOpen = MutableStateFlow(false)
+}
+
 /** true, wenn die rechte Leiste (z. B. Fahrpult) sichtbar ist. Module zeigen ihre Inhalte sonst selbst an. */
 val LocalWideLayout = compositionLocalOf { false }
 
@@ -71,8 +90,12 @@ fun MobaShell(
     screens: List<ModuleScreen> = emptyList(),
     panels: List<ModulePanel> = emptyList(),
     initialScreen: String? = null,
+    imagePicker: ImagePicker? = null,
 ) {
     val dark by app.darkTheme.collectAsState()
+    val appearance by app.appearance.collectAsState()
+    val background by app.backgroundImage.collectAsState()
+    val appearanceOpen by ShellUiState.appearanceOpen.collectAsState()
     val session by app.session.collectAsState()
     val emptyStatus = remember { MutableStateFlow(emptyMap<String, ModuleStatus>()) }
     val modules by (session?.host?.status ?: emptyStatus).collectAsState()
@@ -82,13 +105,20 @@ fun MobaShell(
     var current by remember { mutableStateOf(initialScreen ?: OVERVIEW) }
     if (current != OVERVIEW && visible.none { it.moduleId == current }) current = OVERVIEW
 
-    MobaTheme(dark) {
+    MobaTheme(dark, appearance) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wide = maxWidth >= WIDE_LAYOUT
                 CompositionLocalProvider(LocalWideLayout provides wide) {
                 Column(Modifier.fillMaxSize()) {
-                    TopBar(app, compact = !wide)
+                    TopBar(
+                        app,
+                        compact = !wide,
+                        destinations = listOf(Destination(OVERVIEW, "Übersicht", Icons.Outlined.Dashboard)) +
+                            visible.map { Destination(it.moduleId, it.title, it.icon) },
+                        current = current,
+                        onNavigate = { current = it },
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(Modifier.weight(1f).fillMaxWidth()) {
                         if (wide) {
@@ -111,9 +141,20 @@ fun MobaShell(
                             }
                             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
-                        Box(Modifier.weight(1f).fillMaxHeight().padding(if (wide) 24.dp else 12.dp)) {
-                            val screen = visible.firstOrNull { it.moduleId == current }
-                            if (screen == null) Overview(app, modules, wide) else screen.Content(app)
+                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                            background?.let { image ->
+                                Image(
+                                    image,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    alpha = appearance.watermark.alpha,
+                                    modifier = Modifier.matchParentSize(),
+                                )
+                            }
+                            Box(Modifier.fillMaxSize().padding(if (wide) 24.dp else 12.dp)) {
+                                val screen = visible.firstOrNull { it.moduleId == current }
+                                if (screen == null) Overview(app, modules, wide) else screen.Content(app)
+                            }
                         }
                         if (wide && activePanels.isNotEmpty()) {
                             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -146,12 +187,23 @@ fun MobaShell(
                 }
                 }
             }
+            if (appearanceOpen) {
+                AppearanceDialog(app, imagePicker, onDismiss = { ShellUiState.appearanceOpen.value = false })
+            }
         }
     }
 }
 
+private class Destination(val id: String, val title: String, val icon: ImageVector)
+
 @Composable
-private fun TopBar(app: MobaApp, compact: Boolean) {
+private fun TopBar(
+    app: MobaApp,
+    compact: Boolean,
+    destinations: List<Destination>,
+    current: String,
+    onNavigate: (String) -> Unit,
+) {
     val session by app.session.collectAsState()
     val connected by app.connected.collectAsState()
     val trackPower by app.trackPower.collectAsState()
@@ -199,11 +251,7 @@ private fun TopBar(app: MobaApp, compact: Boolean) {
                 }
             }
 
-            if (!compact) {
-                IconButton(onClick = { app.setDarkTheme(!dark) }) {
-                    Icon(if (dark) Icons.Filled.LightMode else Icons.Filled.DarkMode, "Hell/Dunkel umschalten")
-                }
-            }
+            BurgerMenu(app, dark, destinations, current, onNavigate)
 
             // Nothalt: immer sichtbar, nie lizenzpflichtig
             Button(
@@ -217,6 +265,67 @@ private fun TopBar(app: MobaApp, compact: Boolean) {
                 Spacer(Modifier.width(8.dp))
                 Text("NOTHALT", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
             }
+        }
+    }
+}
+
+/** Menue neben "Gleis an/aus": Ansichten wechseln, Erscheinungsbild, hell/dunkel. */
+@Composable
+private fun BurgerMenu(
+    app: MobaApp,
+    dark: Boolean,
+    destinations: List<Destination>,
+    current: String,
+    onNavigate: (String) -> Unit,
+) {
+    val open by ShellUiState.menuOpen.collectAsState()
+    fun close() {
+        ShellUiState.menuOpen.value = false
+    }
+    Box {
+        IconButton(onClick = { ShellUiState.menuOpen.value = !open }) {
+            Icon(Icons.Filled.Menu, "Menü")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = ::close, modifier = Modifier.widthIn(min = 240.dp)) {
+            Text(
+                "Ansicht",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            destinations.forEach { dest ->
+                val selected = dest.id == current
+                DropdownMenuItem(
+                    text = { Text(dest.title, fontWeight = if (selected) FontWeight.SemiBold else null) },
+                    leadingIcon = { Icon(dest.icon, null, tint = if (selected) MaterialTheme.colorScheme.primary else LocalContentColor.current) },
+                    trailingIcon = if (selected) {
+                        { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        onNavigate(dest.id)
+                        close()
+                    },
+                )
+            }
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            DropdownMenuItem(
+                text = { Text("Erscheinungsbild …") },
+                leadingIcon = { Icon(Icons.Outlined.Palette, null) },
+                onClick = {
+                    close()
+                    ShellUiState.appearanceOpen.value = true
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(if (dark) "Helles Design" else "Dunkles Design") },
+                leadingIcon = { Icon(if (dark) Icons.Filled.LightMode else Icons.Filled.DarkMode, null) },
+                onClick = {
+                    app.setDarkTheme(!dark)
+                    close()
+                },
+            )
         }
     }
 }
