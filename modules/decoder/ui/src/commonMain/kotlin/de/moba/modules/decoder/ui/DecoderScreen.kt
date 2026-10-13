@@ -286,7 +286,7 @@ private fun AddressRow(service: DecoderService, pom: Boolean, pomAddress: Int?) 
     var address by remember { mutableStateOf("") }
     val target = address.toIntOrNull()
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        NumberField("Neue Lokadresse", address, Modifier.width(170.dp)) { address = it }
+        NumberField("Adresse", address, Modifier.width(120.dp)) { address = it }
         OutlinedButton(
             enabled = busy == null && target != null && target in 1..DecoderAddress.MAX_LONG && (!pom || pomAddress != null),
             onClick = {
