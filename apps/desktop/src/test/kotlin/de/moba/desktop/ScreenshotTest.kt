@@ -8,10 +8,20 @@ import androidx.compose.ui.unit.Density
 import de.moba.adapters.catalog.StationCatalog
 import de.moba.adapters.simulator.SimulatorStation
 import de.moba.core.model.Loco
+import de.moba.core.runtime.EcLicenseVerifier
+import de.moba.core.runtime.License
 import de.moba.core.runtime.LicenseInfo
+import de.moba.core.runtime.LicenseSigner
 import de.moba.core.station.Direction
 import de.moba.core.station.StationConfig
 import de.moba.core.station.StationDriver
+import de.moba.modules.decoder.DecoderModule
+import de.moba.modules.decoder.DecoderRepository
+import de.moba.modules.decoder.api.DecoderProfile
+import de.moba.modules.decoder.api.DecoderService
+import de.moba.modules.decoder.api.StandardCvs
+import de.moba.modules.decoder.ui.DecoderScreen
+import de.moba.modules.decoder.ui.DecoderUiState
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.driving.api.DrivingService
 import de.moba.modules.driving.ui.DrivingPanel
@@ -40,8 +50,14 @@ import de.moba.modules.vehicles.api.WagonClass
 import de.moba.modules.vehicles.ui.VehicleDraft
 import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.modules.vehicles.ui.VehiclesUiState
+import de.moba.ui.shell.Appearance
+import de.moba.ui.shell.DesignStyle
+import de.moba.ui.shell.FontChoice
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
+import de.moba.ui.shell.ShellUiState
+import de.moba.ui.shell.TextSize
+import de.moba.ui.shell.WatermarkStrength
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -52,6 +68,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Paint
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.Shader
+import org.jetbrains.skia.Surface
 
 /**
  * Rendert die Oberflaeche ohne Bildschirm und speichert PNGs (PC und Handy, hell und dunkel).
@@ -65,13 +85,17 @@ class ScreenshotTest {
         override fun create(config: StationConfig) = SimulatorStation(name = "YaMoRC YD7001 (Simulator)")
     }
 
+    private val testKeys = LicenseSigner.generateKeyPair()
+    private val testSigner = LicenseSigner(testKeys.first)
+
     @Test
     fun renderScreens() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val app = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator) + StationCatalog.drivers.filter { it.id != "simulator" },
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null))) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(null)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null))) },
+            licenseVerifier = EcLicenseVerifier(testKeys.second),
         )
         app.connect(StationConfig("simulator")).join()
         val session = app.session.value!!
@@ -108,8 +132,8 @@ class ScreenshotTest {
         val pro = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator),
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null))) },
-            license = LicenseInfo.of("pro"),
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null))) },
+            license = LicenseInfo.of("pro", "decoder"),
         )
         pro.connect(StationConfig("simulator")).join()
         val proSim = pro.session.value!!.station as SimulatorStation
@@ -143,6 +167,13 @@ class ScreenshotTest {
             WagonClass("fz-gw-4", VehicleGroup.FREIGHT, "Zacns", "Kesselwagen", WagonCategory.TANK, "VTG", Epoch.V, 140, 5),
             WagonClass("fz-gw-5", VehicleGroup.FREIGHT, "Sgns", "Containertragwagen", WagonCategory.FLAT_SPECIAL, "DB AG", Epoch.V, 227, 2),
         ).forEach { proVehicles.saveWagon(it) }
+
+        // Decoder: Werte aus dem Simulator lesen; mit Zusatzlizenz zwei gespeicherte Programmierungen
+        val decoder = session.host.service(DecoderService::class)!!
+        val readValues = StandardCvs.readSet.associateWith { decoder.read(it) }
+        val proDecoder = pro.session.value!!.host.service(DecoderService::class)!!
+        proDecoder.saveProfile(DecoderProfile("decoder-1", "BR 218 Sound", "BR 218", 3, "ESU LokSound 5", readValues + (3 to 20) + (4 to 16)))
+        proDecoder.saveProfile(DecoderProfile("decoder-2", "V 100 Werkseinstellung", "V 100", 5, "Lenz Standard+", mapOf(1 to 5, 2 to 4, 3 to 6, 4 to 6, 7 to 15, 8 to 99, 29 to 6)))
         delay(300)
 
         outDir.mkdirs()
@@ -205,9 +236,118 @@ class ScreenshotTest {
             render("handy-fahrzeuge-neu-$suffix", 824, 1780, 2f) {
                 MobaShell(app, all, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
             }
+
+            val withDecoder = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen)
+            DecoderUiState.values.value = readValues
+            DecoderUiState.cv.value = "29"
+            DecoderUiState.value.value = "6"
+            render("pc-decoder-$suffix", 1440, 900, 1f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DecoderScreen.moduleId)
+            }
+            render("pc-decoder-datenbank-$suffix", 1440, 900, 1f) {
+                MobaShell(pro, withDecoder, listOf(DrivingPanel), initialScreen = DecoderScreen.moduleId)
+            }
+            render("handy-decoder-$suffix", 824, 1780, 2f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DecoderScreen.moduleId)
+            }
         }
+
+        // Erscheinungsbild: Designs, Schrift, Hintergrundbild als Wasserzeichen, Burger-Menue
+        val withDecoder = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        app.setDarkTheme(true)
+        ShellUiState.menuOpen.value = true
+        render("pc-menue-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        render("handy-menue-dunkel", 824, 1780, 2f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        ShellUiState.menuOpen.value = false
+        assertTrue(app.setBackgroundImage(demoBackground()))
+        for ((style, dark) in listOf(DesignStyle.WINDOWS11 to true, DesignStyle.WINDOWS11 to false, DesignStyle.STELLWERK to true, DesignStyle.STELLWERK to false)) {
+            app.setDarkTheme(dark)
+            app.setAppearance(Appearance(style = style))
+            val name = "${style.name.lowercase()}-${if (dark) "dunkel" else "hell"}"
+            render("pc-design-$name", 1440, 900, 1f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+            }
+            render("pc-design-gleisbild-$name", 1440, 900, 1f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+            }
+            render("handy-design-$name", 824, 1780, 2f) {
+                MobaShell(app, withDecoder, listOf(DrivingPanel))
+            }
+        }
+        app.setDarkTheme(true)
+        app.setAppearance(Appearance(style = DesignStyle.WINDOWS11, font = FontChoice.SERIF, textSize = TextSize.LARGE, watermark = WatermarkStrength.STRONG))
+        render("pc-design-schrift-serifen", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+        }
+        app.setAppearance(Appearance())
+        ShellUiState.appearanceOpen.value = true
+        render("pc-erscheinungsbild-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
+        }
+        render("handy-erscheinungsbild-dunkel", 824, 1780, 2f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
+        }
+        app.setDarkTheme(false)
+        render("pc-erscheinungsbild-hell", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), imagePicker = { it(null) })
+        }
+        ShellUiState.appearanceOpen.value = false
+
+        // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
+        app.setDarkTheme(true)
+        ShellUiState.licenseOpen.value = true
+        render("pc-lizenz-kostenlos-dunkel", 1440, 900, 1f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
+        val key = testSigner.sign(License("L-20261013-4711", "Max Mustermann", setOf("pro", "decoder"), "2026-10-13"))
+        assertTrue(app.activateLicense(key) == null)
+        delay(300)
+        render("pc-lizenz-pro-dunkel", 1440, 900, 1f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
+        app.setDarkTheme(false)
+        render("handy-lizenz-pro-hell", 824, 1780, 2f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
+        ShellUiState.licenseOpen.value = false
+        render("pc-uebersicht-lizenz-hell", 1440, 900, 1f) { MobaShell(app, withDecoder, listOf(DrivingPanel)) }
+
         scope.cancel()
         assertTrue(File(outDir, "pc-fahren-dunkel.png").length() > 0)
+    }
+
+    /** Beispielfoto fuer das Wasserzeichen: Abendhimmel mit Gleisen in Fluchtperspektive. */
+    private fun demoBackground(): ByteArray {
+        val w = 1600
+        val h = 1000
+        val surface = Surface.makeRasterN32Premul(w, h)
+        val canvas = surface.canvas
+        canvas.drawRect(
+            Rect.makeWH(w.toFloat(), h.toFloat()),
+            Paint().apply {
+                shader = Shader.makeLinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(0xFF2B5876.toInt(), 0xFFE0A96D.toInt(), 0xFF3B2F2F.toInt()))
+            },
+        )
+        val rail = Paint().apply {
+            color = 0xFF1A1A1A.toInt()
+            strokeWidth = 14f
+            isAntiAlias = true
+        }
+        val horizon = h * 0.45f
+        val vanish = w / 2f
+        // Schwellen
+        var y = horizon + 8f
+        while (y < h) {
+            val t = (y - horizon) / (h - horizon)
+            canvas.drawLine(vanish - 40f - t * 700f, y, vanish + 40f + t * 700f, y, rail.apply { strokeWidth = 4f + t * 18f })
+            y += 10f + t * 60f
+        }
+        rail.strokeWidth = 12f
+        canvas.drawLine(vanish - 20f, horizon, vanish - 520f, h.toFloat(), rail)
+        canvas.drawLine(vanish + 20f, horizon, vanish + 520f, h.toFloat(), rail)
+        // Signalmast
+        canvas.drawLine(w * 0.78f, h * 0.2f, w * 0.78f, h * 0.75f, rail.apply { strokeWidth = 18f })
+        canvas.drawCircle(w * 0.78f, h * 0.22f, 34f, Paint().apply { color = 0xFFE53935.toInt(); isAntiAlias = true })
+        return surface.makeImageSnapshot().encodeToData(EncodedImageFormat.PNG)!!.bytes
     }
 
     private suspend fun render(

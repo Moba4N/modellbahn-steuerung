@@ -61,3 +61,26 @@ jobs:
         with:
           name: windows-installer
           path: apps/desktop/build/compose/binaries/main/msi/*.msi
+      - name: MSIX-Paket bauen (Microsoft Store)
+        shell: pwsh
+        # Name und Publisher aus dem Partner Center als Repository-Variablen MSIX_IDENTITY_NAME,
+        # MSIX_PUBLISHER und MSIX_PUBLISHER_DISPLAY_NAME hinterlegen; sonst gelten Platzhalter.
+        run: |
+          ./gradlew :apps:desktop:createDistributable
+          $p = @{
+            AppDir = "apps/desktop/build/compose/binaries/main/app/Modellbahn-Steuerung"
+            OutDir = "apps/desktop/build/msix"
+            Version = "0.1.0"
+            TestSign = $true
+          }
+          if ("${{ vars.MSIX_IDENTITY_NAME }}") { $p.IdentityName = "${{ vars.MSIX_IDENTITY_NAME }}" }
+          if ("${{ vars.MSIX_PUBLISHER }}") { $p.Publisher = "${{ vars.MSIX_PUBLISHER }}" }
+          if ("${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}") { $p.PublisherDisplayName = "${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}" }
+          New-Item -ItemType Directory -Force $p.OutDir | Out-Null
+          ./apps/desktop/packaging/msix/build-msix.ps1 @p
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msix
+          path: |
+            apps/desktop/build/msix/*.msix
+            apps/desktop/build/msix/*.cer

@@ -34,7 +34,10 @@ include(
     ":modules:trackplan:impl",
     ":modules:vehicles:api",
     ":modules:vehicles:impl",
+    ":modules:decoder:api",
+    ":modules:decoder:impl",
     ":tools:sandbox",
+    ":tools:license",
 )
 
 // Oberflaeche und Apps brauchen Compose und das Android SDK.
@@ -45,6 +48,7 @@ if (providers.gradleProperty("moba.apps").getOrElse("true").toBoolean()) {
         ":modules:driving:ui",
         ":modules:trackplan:ui",
         ":modules:vehicles:ui",
+        ":modules:decoder:ui",
         ":apps:desktop",
         ":apps:android",
     )

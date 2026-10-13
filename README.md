@@ -4,7 +4,7 @@ Modulare Steuerungssoftware fuer digitale Modellbahnen, fuer Android und Windows
 Das Architektur-Dokument beschreibt Module, Abo-Modell und Fahrplan der Entwicklung.
 
 Stand: **Phase 1** plus Zentralen-Paket Stufe A. Kern, Simulator, Adapter fuer Z21, Maerklin CS, ESU ECoS,
-DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge" und "Gleisbild".
+DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und "Gleisbild".
 
 ## Aufbau
 
@@ -24,6 +24,7 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge" und "Gleisbild"
 | `adapters/catalog` | Liste aller Zentralen fuer den Verbindungsdialog und Netzwerksuche |
 | `modules/driving` | Modul "Fahren": `api` (Schnittstelle), `impl` (Logik), `ui` (Fahrregler) |
 | `modules/vehicles` | Modul "Fahrzeuge": Loks, Gueterwagen- und Personenwagengattungen anlegen |
+| `modules/decoder` | Modul "Decoder": CV-Programmierung und Decoder-Datenbank |
 | `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
@@ -105,6 +106,19 @@ Jede Aenderung wird sofort in `fahrzeuge.txt` gespeichert (gleicher Ordner wie d
 Wer nach einem Abo-Wechsel mehr Eintraege hat als erlaubt, behaelt sie und kann sie bearbeiten,
 aber keine neuen anlegen.
 
+## Decoder
+
+CVs lesen und schreiben ist kostenlos: auf dem Programmiergleis (lesen und schreiben) oder waehrend
+der Fahrt auf dem Hauptgleis (POM, nur schreiben). Dazu gibt es "Decoder auslesen" (CV 1 bis 8, 17, 18,
+19, 29 mit Hersteller und Adresse), "Adresse schreiben" (kurz oder lang samt CV 29) und die Schalter
+von CV 29 einzeln.
+
+Die Decoder-Datenbank sichert die Werte je Lok in `decoder.txt` und schreibt sie spaeter zurueck.
+Sie braucht die Zusatzlizenz "Decoder-Datenbank" (Schluessel `decoder`, im Club-Abo enthalten).
+
+Programmieren geht bisher mit Zentralen am Z21-Protokoll (YaMoRC YD7001, Roco z21) und im Simulator.
+An echter Hardware ist es noch nicht geprueft.
+
 ## Gleisbild
 
 Der Editor arbeitet auf einem Raster mit 45-Grad-Schritten. Gleisformen: Gerade, Kurve 45°, Bogen 90°,
@@ -121,6 +135,40 @@ Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelde
 Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn-steuerung`,
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
+
+## Erscheinungsbild
+
+Das Burger-Menue oben neben "Gleis an/aus" wechselt die Ansicht und oeffnet "Erscheinungsbild".
+Dort lassen sich kostenlos einstellen:
+
+- Design: Modern, Windows 11 (Fluent-Farben, kleine Ecken) oder Stellwerk, jeweils hell oder dunkel
+- Schriftart (Standard, Serifenlos, Serifen, Schreibmaschine) und Schriftgroesse
+- eigenes Hintergrundbild als Wasserzeichen in drei Staerken. Das Bild wird als Kopie
+  `hintergrund.bild` im Datenordner gespeichert.
+
+## Microsoft Store (MSIX)
+
+Der GitHub-Build legt unter "Actions" den Download `windows-msix` ab:
+
+- `Modellbahn-Steuerung-0.1.0.0.msix`: unsigniert, zum Hochladen im Partner Center (Microsoft signiert es).
+- `Modellbahn-Steuerung-0.1.0.0-test.msix` mit `Modellbahn-Steuerung-Test.cer`: zum Ausprobieren ohne Store.
+
+Paketname und Herausgeber aus dem Partner Center ("Produktidentitaet") als Repository-Variablen
+`MSIX_IDENTITY_NAME`, `MSIX_PUBLISHER` und `MSIX_PUBLISHER_DISPLAY_NAME` eintragen. Vorlage und Skript liegen
+in `apps/desktop/packaging/msix`.
+
+## Lizenzen
+
+Ohne Lizenz laeuft die kostenlose Version. Freischaltungen: `basis`, `pro` (enthaelt Basis), `decoder` (Decoder-Datenbank), `club` (alles).
+Ein Lizenzschluessel (`MOBA1-...`) ist mit ECDSA P-256 unterschrieben und wird in der App ohne Internet
+mit dem oeffentlichen Schluessel in `ManufacturerKey.kt` geprueft. Eingabe: Burger-Menue, "Lizenz ...".
+
+Den privaten Schluessel gibt es nur ausserhalb des Repositorys. Lizenzen erstellen:
+
+```
+./gradlew :tools:license:run --args="erstellen --privat /pfad/privat.key --name 'Max Mustermann' --module pro --bis 2027-12-31"
+./gradlew :tools:license:run --args="pruefen MOBA1-..."
+```
 
 ## Naechste Schritte
 

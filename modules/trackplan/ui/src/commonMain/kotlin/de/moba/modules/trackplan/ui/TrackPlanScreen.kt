@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material.icons.outlined.AdsClick
 import androidx.compose.material.icons.outlined.AltRoute
@@ -100,7 +102,8 @@ object TrackPlanUiState {
     /** Drehung neu gesetzter Gleise in 45-Grad-Schritten; 2 = waagerecht. */
     val placeRotation = MutableStateFlow(2)
     val selected = MutableStateFlow<Pair<Int, Int>?>(null)
-    val cellSize = MutableStateFlow(32)
+    /** Kachelgroesse im Editor in dp; `null` = so gross, dass das ganze Raster ins Fenster passt. */
+    val cellSize = MutableStateFlow<Int?>(null)
     val message = MutableStateFlow<String?>(null)
 }
 
@@ -358,11 +361,11 @@ private fun EditorToolbar(service: TrackPlanService, plans: List<TrackPlan>, pla
             }
         } else {
             OutlinedButton(onClick = {
-                say("Speichern gibt es mit jedem Abo (ab Basis). Zeichnen und Ausprobieren bleiben kostenlos.")
+                say("Speichern gibt es ab der Basis-Lizenz (Burger-Menü, „Lizenz …“). Zeichnen und Ausprobieren bleiben kostenlos.")
             }) {
                 Icon(Icons.Filled.Lock, null, tint = Moba.colors.locked, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Speichern ab Basis-Abo")
+                Text("Speichern ab Basis-Lizenz")
             }
         }
     }
@@ -522,15 +525,22 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier.clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.surfaceContainerLowest),
     ) {
+        // Platz fuer das Raster ohne Rand (12 dp je Seite)
+        val areaWidth = (maxWidth - 24.dp).value
+        val areaHeight = (maxHeight - 24.dp).value
+        val fitCell = minOf(areaWidth / plan.width, areaHeight / plan.height).toInt().coerceIn(MIN_CELL, MAX_CELL)
+        val cell = cellSize ?: fitCell
+        // Auf schmalen Bildschirmen nur Symbole, sonst passt die Leiste nicht
+        val labels = maxWidth >= 560.dp
         Box(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())
                 .padding(12.dp),
         ) {
-            TrackPlanView(plan, cellSize.dp, TrackState(), selected = selected, showGrid = true, onTap = ::tap)
+            TrackPlanView(plan, cell.dp, TrackState(), selected = selected, showGrid = true, onTap = ::tap)
         }
         Surface(
             Modifier.align(Alignment.BottomEnd).padding(10.dp),
@@ -538,17 +548,51 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
             shape = MaterialTheme.shapes.small,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { TrackPlanUiState.cellSize.value = (cellSize - 6).coerceAtLeast(14) }) {
+                IconButton(onClick = { TrackPlanUiState.cellSize.value = (cell - 4).coerceAtLeast(MIN_CELL) }) {
                     Icon(Icons.Filled.ZoomOut, "Verkleinern")
                 }
-                Text("${cellSize * 100 / 32} %", style = MaterialTheme.typography.labelMedium)
-                IconButton(onClick = { TrackPlanUiState.cellSize.value = (cellSize + 6).coerceAtMost(62) }) {
+                Text("${cell * 100 / 32} %", style = MaterialTheme.typography.labelMedium)
+                IconButton(onClick = { TrackPlanUiState.cellSize.value = (cell + 4).coerceAtMost(MAX_CELL) }) {
                     Icon(Icons.Filled.ZoomIn, "Vergrößern")
+                }
+                ToolButton("Einpassen", Icons.Filled.FitScreen, labels, enabled = cellSize != null) {
+                    TrackPlanUiState.cellSize.value = null
+                }
+                // Raster so gross machen, dass es bei dieser Zoomstufe genau das Fenster fuellt
+                val columns = (areaWidth / cell).toInt()
+                val rows = (areaHeight / cell).toInt()
+                val fitted = plan.fitTo(columns, rows)
+                ToolButton(
+                    "Raster ans Fenster",
+                    Icons.Filled.GridOn,
+                    labels,
+                    enabled = fitted.width != plan.width || fitted.height != plan.height,
+                ) {
+                    TrackPlanUiState.cellSize.value = cell
+                    service.update(fitted)
+                    say("Raster jetzt ${fitted.width} × ${fitted.height} Felder.")
                 }
             }
         }
     }
 }
+
+@Composable
+private fun ToolButton(label: String, icon: ImageVector, showLabel: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    if (showLabel) {
+        TextButton(enabled = enabled, onClick = onClick) {
+            Icon(icon, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(label)
+        }
+    } else {
+        IconButton(enabled = enabled, onClick = onClick) { Icon(icon, label) }
+    }
+}
+
+/** Kleinste und groesste Kachel im Editor in dp. */
+private const val MIN_CELL = 8
+private const val MAX_CELL = 80
 
 /** Eigenschaften der ausgewaehlten Kachel: Adresse, s88-Kontakt, Text, Drehung. */
 @OptIn(ExperimentalLayoutApi::class)

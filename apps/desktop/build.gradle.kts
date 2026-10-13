@@ -24,6 +24,8 @@ dependencies {
     implementation(project(":modules:trackplan:impl"))
     implementation(project(":modules:vehicles:ui"))
     implementation(project(":modules:vehicles:impl"))
+    implementation(project(":modules:decoder:ui"))
+    implementation(project(":modules:decoder:impl"))
     implementation(project(":adapters:catalog"))
     implementation(compose.desktop.currentOs)
     implementation(libs.kotlinx.coroutines.swing)
@@ -47,6 +49,9 @@ compose.desktop {
             windows {
                 menu = true
                 shortcut = true
+                iconFile.set(project.file("packaging/icon.ico"))
+                // Gleiche Kennung fuer alle Versionen, damit ein Update die alte Version ersetzt.
+                upgradeUuid = "6f3d2a51-8c4e-4b7a-9e15-2d7c0b8f4a63"
             }
         }
     }

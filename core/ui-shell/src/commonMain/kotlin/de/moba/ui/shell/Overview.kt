@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -88,7 +89,14 @@ private fun TrackPowerCard(app: MobaApp) {
 private fun ModulesCard(app: MobaApp, modules: Map<String, ModuleStatus>) {
     val session by app.session.collectAsState()
     val colors = Moba.colors
-    SectionCard(title = "Module", icon = Icons.Outlined.Extension) {
+    val license by app.activeLicense.collectAsState()
+    SectionCard(
+        title = "Module",
+        icon = Icons.Outlined.Extension,
+        trailing = {
+            TextButton(onClick = { ShellUiState.licenseOpen.value = true }) { Text("Lizenz: ${editionLabel(license)}") }
+        },
+    ) {
         if (modules.isEmpty()) {
             Text("Noch keine Module gestartet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

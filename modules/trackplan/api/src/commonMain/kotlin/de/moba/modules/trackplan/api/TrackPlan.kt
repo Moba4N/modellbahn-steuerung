@@ -130,6 +130,16 @@ data class TrackPlan(
         return copy(width = w, height = h, tiles = tiles.filter { it.x < w && it.y < h })
     }
 
+    /**
+     * Passt das Raster an eine Flaeche von [columns] x [rows] Kacheln an, z. B. an das Fenster.
+     * Anders als [resize] fallen dabei nie Gleise weg: das Raster bleibt mindestens so gross wie der Plan.
+     */
+    fun fitTo(columns: Int, rows: Int): TrackPlan {
+        val usedWidth = (tiles.maxOfOrNull { it.x } ?: -1) + 1
+        val usedHeight = (tiles.maxOfOrNull { it.y } ?: -1) + 1
+        return resize(maxOf(columns, usedWidth), maxOf(rows, usedHeight))
+    }
+
     companion object {
         const val DEFAULT_WIDTH = 40
         const val DEFAULT_HEIGHT = 24

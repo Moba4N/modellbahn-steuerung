@@ -50,3 +50,22 @@ sealed interface StationEvent {
     /** Belegtmelder, z. B. s88: [module] ab 1, [contact] 1 bis 16. */
     data class FeedbackChanged(val module: Int, val contact: Int, val occupied: Boolean) : StationEvent
 }
+
+/**
+ * Zusatz fuer Zentralen, die Decoder programmieren koennen. Ein Adapter implementiert ihn neben
+ * [CommandStation]; fehlt er, bietet die App keine CV-Programmierung an.
+ * CV-Nummern zaehlen ab 1 (wie in Decoder-Anleitungen), Werte 0 bis 255.
+ */
+interface CvProgrammer {
+    /** Liest eine CV auf dem Programmiergleis. @throws CvException ohne Antwort des Decoders */
+    suspend fun readCv(cv: Int): Int
+
+    /** Schreibt eine CV auf dem Programmiergleis und wartet auf die Bestaetigung. @throws CvException */
+    suspend fun writeCv(cv: Int, value: Int)
+
+    /** Schreibt eine CV waehrend der Fahrt auf dem Hauptgleis (POM). Der Decoder bestaetigt nicht. */
+    suspend fun writeCvOnMain(address: Int, cv: Int, value: Int)
+}
+
+/** Programmieren fehlgeschlagen, z. B. keine Lok auf dem Programmiergleis oder Kurzschluss. */
+class CvException(message: String) : Exception(message)

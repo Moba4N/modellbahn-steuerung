@@ -3,6 +3,9 @@ package de.moba.android
 import android.app.Application
 import android.content.Context
 import de.moba.adapters.catalog.StationCatalog
+import de.moba.modules.decoder.DecoderModule
+import de.moba.modules.decoder.DecoderRepository
+import de.moba.modules.decoder.FileDecoderStore
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.trackplan.FileTrackPlanStore
 import de.moba.modules.trackplan.TrackPlanModule
@@ -10,6 +13,9 @@ import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.vehicles.FileVehicleStore
 import de.moba.modules.vehicles.VehicleModule
 import de.moba.modules.vehicles.VehicleRepository
+import de.moba.core.runtime.EcLicenseVerifier
+import de.moba.core.runtime.ManufacturerKey
+import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.SettingsStore
 import kotlinx.coroutines.CoroutineScope
@@ -23,15 +29,24 @@ class MobaApplication : Application() {
         val prefs = getSharedPreferences("moba", Context.MODE_PRIVATE)
         val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(filesDir, "gleisbilder.txt")))
         val vehicles = VehicleRepository(FileVehicleStore(File(filesDir, "fahrzeuge.txt")))
+        val decoders = DecoderRepository(FileDecoderStore(File(filesDir, "decoder.txt")))
         MobaApp(
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
             drivers = StationCatalog.drivers,
             discovery = StationCatalog.discovery,
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles)) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders)) },
             settings = object : SettingsStore {
                 override fun get(key: String): String? = prefs.getString(key, null)
                 override fun set(key: String, value: String) = prefs.edit().putString(key, value).apply()
             },
+            imageStore = object : ImageStore {
+                private val file = File(filesDir, "hintergrund.bild")
+                override fun load(): ByteArray? = file.takeIf { it.isFile }?.readBytes()
+                override fun save(bytes: ByteArray?) {
+                    if (bytes == null) file.delete() else file.writeBytes(bytes)
+                }
+            },
+            licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
         ).also { it.start() }
     }
 }

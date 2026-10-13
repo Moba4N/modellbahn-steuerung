@@ -99,6 +99,35 @@ object Z21Codec {
         return xPacket(0x53, fAdr shr 8, fAdr and 0xFF, value)
     }
 
+    /** Liest eine CV auf dem Programmiergleis (LAN_X_CV_READ). Auf dem Draht zaehlt CV 1 als 0. */
+    fun cvRead(cv: Int): ByteArray {
+        val a = cvAddress(cv)
+        return xPacket(0x23, 0x11, a shr 8, a and 0xFF)
+    }
+
+    /** Schreibt eine CV auf dem Programmiergleis (LAN_X_CV_WRITE). */
+    fun cvWrite(cv: Int, value: Int): ByteArray {
+        val a = cvAddress(cv)
+        return xPacket(0x24, 0x12, a shr 8, a and 0xFF, cvValue(value))
+    }
+
+    /** Schreibt eine CV auf dem Hauptgleis (LAN_X_CV_POM_WRITE_BYTE). */
+    fun cvPomWrite(address: Int, cv: Int, value: Int): ByteArray {
+        val (msb, lsb) = locoAddress(address)
+        val a = cvAddress(cv)
+        return xPacket(0xE6, 0x30, msb, lsb, 0xEC or ((a shr 8) and 0x03), a and 0xFF, cvValue(value))
+    }
+
+    private fun cvAddress(cv: Int): Int {
+        require(cv in 1..1024) { "CV muss zwischen 1 und 1024 liegen" }
+        return cv - 1
+    }
+
+    private fun cvValue(value: Int): Int {
+        require(value in 0..255) { "Ein CV-Wert liegt zwischen 0 und 255" }
+        return value
+    }
+
     private fun locoAddress(address: Int): Pair<Int, Int> {
         require(address in 1..9999) { "Lokadresse muss zwischen 1 und 9999 liegen" }
         val msb = (address shr 8) and 0x3F
@@ -137,9 +166,13 @@ object Z21Codec {
                 0x00 -> Z21Message.TrackPower(on = false)
                 0x01 -> Z21Message.TrackPower(on = true)
                 0x08 -> Z21Message.ShortCircuit
+                0x12 -> Z21Message.CvNack(shortCircuit = true)
+                0x13 -> Z21Message.CvNack(shortCircuit = false)
                 else -> null
             }
             x == 0x81 && u8(data, 1) == 0x00 -> Z21Message.EmergencyStopped
+            x == 0x64 && u8(data, 1) == 0x14 && data.size >= 5 ->
+                Z21Message.CvResult(((u8(data, 2) shl 8) or u8(data, 3)) + 1, u8(data, 4))
             x == 0x62 && u8(data, 1) == 0x22 && data.size >= 3 -> {
                 val state = u8(data, 2)
                 Z21Message.Status(
@@ -225,4 +258,10 @@ sealed interface Z21Message {
     /** LocoNet-Belegtmelder; [address] ab 1. */
     data class LocoNetOccupancy(val address: Int, val occupied: Boolean) : Z21Message
     data object SystemState : Z21Message
+
+    /** Antwort auf Lesen oder Schreiben einer CV; [cv] ab 1. */
+    data class CvResult(val cv: Int, val value: Int) : Z21Message
+
+    /** Der Decoder hat nicht geantwortet, oder auf dem Programmiergleis gab es einen Kurzschluss. */
+    data class CvNack(val shortCircuit: Boolean) : Z21Message
 }

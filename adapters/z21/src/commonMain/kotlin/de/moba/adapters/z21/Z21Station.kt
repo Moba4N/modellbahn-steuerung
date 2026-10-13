@@ -1,6 +1,8 @@
 package de.moba.adapters.z21
 
 import de.moba.core.station.CommandStation
+import de.moba.core.station.CvException
+import de.moba.core.station.CvProgrammer
 import de.moba.core.station.Direction
 import de.moba.core.station.LocoState
 import de.moba.core.station.StationEvent
@@ -15,6 +17,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Verbindung zur Zentrale fehlgeschlagen oder abgebrochen. */
@@ -42,7 +46,8 @@ class Z21Station(
     private val connectTimeoutMillis: Long = 3_000,
     private val keepAliveMillis: Long = 30_000,
     private val turnoutPulseMillis: Long = 100,
-) : CommandStation {
+    private val cvTimeoutMillis: Long = 15_000,
+) : CommandStation, CvProgrammer {
     private val _events = MutableSharedFlow<StationEvent>(extraBufferCapacity = 256)
     override val events: SharedFlow<StationEvent> = _events
 
@@ -50,6 +55,11 @@ class Z21Station(
     private var scope: CoroutineScope? = null
     private val subscribedLocos = mutableSetOf<Int>()
     private val rmBusInputs = mutableMapOf<Int, Int>()
+
+    /** Zuletzt gemeldete Gleisspannung; nach dem Programmieren wird sie wiederhergestellt. */
+    private var trackPowerOn = false
+    private val programming = Mutex()
+    private var pendingCv: CompletableDeferred<Z21Message>? = null
 
     override suspend fun connect() {
         if (transport != null) return
@@ -123,6 +133,39 @@ class Z21Station(
         send(Z21Codec.setTurnout(address, thrown, activate = false))
     }
 
+    override suspend fun readCv(cv: Int): Int = programTrack(cv, Z21Codec.cvRead(cv))
+
+    override suspend fun writeCv(cv: Int, value: Int) {
+        val confirmed = programTrack(cv, Z21Codec.cvWrite(cv, value))
+        if (confirmed != value) throw CvException("CV $cv: geschrieben $value, Decoder meldet $confirmed")
+    }
+
+    override suspend fun writeCvOnMain(address: Int, cv: Int, value: Int) = send(Z21Codec.cvPomWrite(address, cv, value))
+
+    /**
+     * Ein Befehl auf dem Programmiergleis: Die Zentrale antwortet mit dem Wert oder einem NACK.
+     * Danach verlaesst sie den Programmiermodus erst, wenn die Gleisspannung neu gesetzt wird.
+     */
+    private suspend fun programTrack(cv: Int, packet: ByteArray): Int = programming.withLock {
+        val reply = CompletableDeferred<Z21Message>()
+        pendingCv = reply
+        val powerBefore = trackPowerOn
+        try {
+            send(packet)
+            when (val m = withTimeoutOrNull(cvTimeoutMillis) { reply.await() }) {
+                is Z21Message.CvResult -> m.value
+                is Z21Message.CvNack -> throw CvException(
+                    if (m.shortCircuit) "Kurzschluss auf dem Programmiergleis."
+                    else "Der Decoder antwortet nicht (CV $cv). Steht die Lok auf dem Programmiergleis?",
+                )
+                else -> throw CvException("Keine Antwort von $name beim Programmieren (CV $cv).")
+            }
+        } finally {
+            pendingCv = null
+            runCatching { send(if (powerBefore) Z21Codec.trackPowerOn() else Z21Codec.trackPowerOff()) }
+        }
+    }
+
     /** Lokinfo abfragen; die Zentrale schickt danach jede Aenderung dieser Lok. */
     private suspend fun subscribe(address: Int) {
         if (subscribedLocos.add(address)) send(Z21Codec.getLocoInfo(address))
@@ -135,8 +178,15 @@ class Z21Station(
 
     private suspend fun handle(message: Z21Message) {
         when (message) {
-            is Z21Message.TrackPower -> _events.emit(StationEvent.TrackPowerChanged(message.on))
-            is Z21Message.Status -> _events.emit(StationEvent.TrackPowerChanged(!message.trackPowerOff))
+            is Z21Message.TrackPower -> {
+                trackPowerOn = message.on
+                _events.emit(StationEvent.TrackPowerChanged(message.on))
+            }
+            is Z21Message.Status -> {
+                trackPowerOn = !message.trackPowerOff
+                _events.emit(StationEvent.TrackPowerChanged(!message.trackPowerOff))
+            }
+            is Z21Message.CvResult, is Z21Message.CvNack -> pendingCv?.complete(message)
             Z21Message.EmergencyStopped -> _events.emit(StationEvent.EmergencyStopped)
             Z21Message.ShortCircuit -> _events.emit(StationEvent.TrackPowerChanged(false))
             is Z21Message.TurnoutInfo -> _events.emit(StationEvent.TurnoutChanged(message.address, message.thrown))
