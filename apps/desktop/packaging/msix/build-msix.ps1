@@ -10,7 +10,7 @@ param(
     [Parameter(Mandatory)] [string] $AppDir,
     [Parameter(Mandatory)] [string] $OutDir,
     [Parameter(Mandatory)] [string] $Version,
-    [string] $IdentityName = "Moba4N.ModellbahnSteuerung",
+    [string] $IdentityName = "Modellbahn-Steuerung",
     [string] $Publisher = "CN=Moba4N",
     [string] $PublisherDisplayName = "Moba4N",
     [switch] $TestSign
