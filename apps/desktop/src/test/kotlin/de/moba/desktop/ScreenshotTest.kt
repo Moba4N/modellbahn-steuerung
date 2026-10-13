@@ -307,7 +307,7 @@ class ScreenshotTest {
         }
         ShellUiState.appearanceOpen.value = false
 
-        // Symbole: Pixel-Editor wie TrainController, Signalbilder der EU-Laender, Einsatz im Gleisbild
+        // Symbole: Pixel-Editor wie TrainController, Licht- und Formsignale, Einsatz im Gleisbild
         app.setDarkTheme(true)
         pro.setDarkTheme(true)
         val withSymbols = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen)
@@ -329,14 +329,14 @@ class ScreenshotTest {
             MobaShell(pro, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
         }
         SymbolsUiState.tab.value = SymbolsTab.SIGNALS
-        for ((country, system) in listOf("DE" to "de-hv-hp", "DE" to "de-ks", "CH" to "ch-l-hs", "FR" to "fr-cible", "PL" to "pl-main", "SE" to "se-hs")) {
+        for ((country, system) in listOf("DE" to "de-hv-hp", "DE" to "de-ks", "DE" to "de-form-hp2", "DE" to "de-form-vr", "CH" to "ch-l-hs", "CH" to "ch-form-hs", "NL" to "nl-main", "NL" to "nl-arm")) {
             SymbolsUiState.country.value = country
             SymbolsUiState.system.value = system
             render("pc-signalbilder-$system-dunkel", 1440, 900, 1f) {
                 MobaShell(app, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
             }
         }
-        SymbolsUiState.country.value = "AT"
+        SymbolsUiState.country.value = "NL"
         SymbolsUiState.system.value = null
         render("handy-signalbilder-dunkel", 824, 1780, 2f) {
             MobaShell(app, withSymbols, listOf(DrivingPanel), initialScreen = SymbolsScreen.moduleId)
@@ -352,7 +352,9 @@ class ScreenshotTest {
         val proPlansService = pro.session.value!!.host.service(TrackPlanService::class)!!
         val main = proPlansService.plans.value.first()
         var withSignals = main
-        main.tiles.filter { it.shape == TrackShape.SIGNAL }.forEach { withSignals = withSignals.put(it.copy(symbol = "signal:de-ks")) }
+        main.tiles.filter { it.shape == TrackShape.SIGNAL }.forEachIndexed { i, tile ->
+            withSignals = withSignals.put(tile.copy(symbol = if (i == 0) "signal:de-ks" else "signal:de-form-hp2"))
+        }
         val free = (0 until main.width).first { x -> withSignals.tileAt(x, 0) == null }
         withSignals = withSignals.put(TrackTile(free, 0, TrackShape.SYMBOL, symbol = "sym-1"))
         proPlansService.update(withSignals)

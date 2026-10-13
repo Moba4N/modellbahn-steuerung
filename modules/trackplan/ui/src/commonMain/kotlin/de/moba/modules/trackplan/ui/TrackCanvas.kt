@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
@@ -34,6 +35,8 @@ import de.moba.modules.trackplan.api.activeBranch
 import de.moba.modules.symbols.api.PixelImage
 import de.moba.modules.symbols.ui.drawPixels
 import de.moba.ui.shell.Moba
+import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.sqrt
 
 /** Farben des Gleisbilds, abgeleitet vom App-Thema. */
@@ -247,10 +250,13 @@ internal fun DrawScope.drawTile(
             )
         }
         TileKind.SIGNAL -> if (image != null) {
-            // Gewaehltes Signalbild neben dem Gleis, immer aufrecht
+            // Wie in iTrain: Signal neben dem Gleis, Mastfuss am Gleis, Schirm zeigt vom Gleis weg
             val side = cell * 0.9f
             val center = c + across * (cell * 0.3f)
-            drawPixels(image, origin = Offset(center.x - side / 2, center.y - side / 2), side = side)
+            val degrees = atan2(across.x, -across.y) * 180f / PI.toFloat()
+            rotate(degrees, pivot = center) {
+                drawPixels(image, origin = Offset(center.x - side / 2, center.y - side / 2), side = side)
+            }
         } else {
             val lamp = when (tile.address?.let { state.turnouts[it] }) {
                 true -> colors.signalRed

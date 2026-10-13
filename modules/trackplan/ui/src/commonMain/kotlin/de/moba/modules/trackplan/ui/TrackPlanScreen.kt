@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -107,6 +108,9 @@ object TrackPlanUiState {
     /** Kachelgroesse im Editor in dp; `null` = so gross, dass das ganze Raster ins Fenster passt. */
     val cellSize = MutableStateFlow<Int?>(null)
     val message = MutableStateFlow<String?>(null)
+
+    /** Signalbild fuer neu gesetzte Signale: das zuletzt gewaehlte, anfangs das H/V-Lichthauptsignal. */
+    val lastSignal = MutableStateFlow("signal:de-hv-hp")
 }
 
 /** Reiter "Gleisbild": Betrieb (Weichen schalten, Belegung sehen) und Editor. */
@@ -179,7 +183,10 @@ private fun ColumnScope.OperationView(service: TrackPlanService) {
     val occupied by service.occupied.collectAsState()
     val scope = rememberCoroutineScope()
     val library = LocalSymbolLibrary.current
-    val state = TrackState(turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, library) })
+    val aspects by service.signalAspects.collectAsState()
+    val state = TrackState(turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, aspects, library) })
+    // Offenes Signalbild-Menue (Gleisbild-Id, Kachel), wie in iTrain per Klick aufs Signal
+    var aspectMenu by remember { mutableStateOf<Pair<String, TrackTile>?>(null) }
     val wide = LocalWideLayout.current
 
     FlowRow(
@@ -216,23 +223,37 @@ private fun ColumnScope.OperationView(service: TrackPlanService) {
     val shown = visible.mapNotNull { id -> plans.firstOrNull { it.id == id } }
     val onTap = { plan: TrackPlan, x: Int, y: Int ->
         plan.tileAt(x, y)?.takeIf { it.shape.hasAddress && it.address != null }?.let { tile ->
-            scope.launch {
-                runCatching { service.operate(tile) }.onFailure { say("Schalten nicht möglich: ${it.message}") }
+            if (tile.shape.kind == TileKind.SIGNAL && tileStates(tile, library).size > 2) {
+                aspectMenu = plan.id to tile
+            } else {
+                scope.launch {
+                    runCatching { service.operate(tile) }.onFailure { say("Schalten nicht möglich: ${it.message}") }
+                }
             }
         }
         Unit
+    }
+    val menu = { plan: TrackPlan ->
+        aspectMenu?.takeIf { it.first == plan.id }?.second?.let { tile ->
+            AspectOverlay(tile, aspects[tile.address], onPick = { i ->
+                aspectMenu = null
+                scope.launch {
+                    runCatching { service.setAspect(tile, i) }.onFailure { say("Schalten nicht möglich: ${it.message}") }
+                }
+            }, onDismiss = { aspectMenu = null })
+        }
     }
     if (wide) {
         Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when (shown.size) {
                 0 -> Unit
-                1 -> PlanCard(shown[0], state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap)
-                2 -> shown.forEach { PlanCard(it, state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap) }
+                1 -> PlanCard(shown[0], state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap, menu = menu)
+                2 -> shown.forEach { PlanCard(it, state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap, menu = menu) }
                 else -> {
-                    PlanCard(shown[0], state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap)
+                    PlanCard(shown[0], state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap, menu = menu)
                     Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         shown.drop(1).forEach {
-                            PlanCard(it, state, Modifier.weight(1f).fillMaxHeight(), fill = true, onTap = onTap)
+                            PlanCard(it, state, Modifier.weight(1f).fillMaxHeight(), fill = true, onTap = onTap, menu = menu)
                         }
                     }
                 }
@@ -243,7 +264,7 @@ private fun ColumnScope.OperationView(service: TrackPlanService) {
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            shown.forEach { PlanCard(it, state, Modifier.fillMaxWidth(), fill = false, onTap = onTap) }
+            shown.forEach { PlanCard(it, state, Modifier.fillMaxWidth(), fill = false, onTap = onTap, menu = menu) }
         }
     }
 }
@@ -256,6 +277,7 @@ private fun PlanCard(
     modifier: Modifier,
     fill: Boolean,
     onTap: (TrackPlan, Int, Int) -> Unit,
+    menu: (TrackPlan) -> AspectOverlayData? = { null },
 ) {
     Card(
         modifier = modifier,
@@ -277,6 +299,11 @@ private fun PlanCard(
                 val cell = (if (fill) minOf(byWidth, maxHeight / plan.height) else byWidth).coerceIn(10.dp, 44.dp)
                 Box(Modifier.horizontalScroll(rememberScrollState())) {
                     TrackPlanView(plan, cell, state, onTap = { x, y -> onTap(plan, x, y) })
+                    menu(plan)?.let { m ->
+                        Box(Modifier.offset(cell * m.tile.x, cell * m.tile.y).size(cell)) {
+                            AspectMenu(m.tile, m.current, m.onPick, m.onDismiss)
+                        }
+                    }
                 }
             }
         }
@@ -508,7 +535,7 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
     val cellSize by TrackPlanUiState.cellSize.collectAsState()
 
     val library = LocalSymbolLibrary.current
-    val editorState = TrackState(symbolImage = { symbolImage(it, emptyMap(), library) })
+    val editorState = TrackState(symbolImage = { symbolImage(it, emptyMap(), emptyMap(), library) })
 
     fun tap(x: Int, y: Int) {
         val tile = plan.tileAt(x, y)
@@ -528,7 +555,11 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
                     service.update(plan.rotate(x, y))
                 } else {
                     val rot = if (t.shape == TrackShape.TEXT) 0 else rotation
-                    val symbol = if (t.shape == TrackShape.SYMBOL) library.firstOrNull()?.id.orEmpty() else ""
+                    val symbol = when (t.shape) {
+                        TrackShape.SYMBOL -> library.firstOrNull()?.id.orEmpty()
+                        TrackShape.SIGNAL -> TrackPlanUiState.lastSignal.value
+                        else -> ""
+                    }
                     service.update(plan.put(TrackTile(x, y, t.shape, rot, text = if (t.shape == TrackShape.TEXT) "Text" else "", symbol = symbol)))
                 }
                 TrackPlanUiState.selected.value = x to y
@@ -628,7 +659,7 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val library = LocalSymbolLibrary.current
-                ShapePreview(tile, 32.dp, TrackState(symbolImage = { symbolImage(it, emptyMap(), library) }))
+                ShapePreview(tile, 32.dp, TrackState(symbolImage = { symbolImage(it, emptyMap(), emptyMap(), library) }))
                 Column {
                     Text(tile.shape.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(
@@ -646,7 +677,10 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                     }
                 }
                 if (tile.shape.kind == TileKind.SIGNAL || tile.shape.kind == TileKind.SYMBOL) {
-                    SymbolChooser(tile) { set(tile.copy(symbol = it)) }
+                    SymbolChooser(tile) {
+                        if (tile.shape.kind == TileKind.SIGNAL) TrackPlanUiState.lastSignal.value = it
+                        set(tile.copy(symbol = it))
+                    }
                 }
                 if (tile.shape.hasAddress) {
                     val label = when {
@@ -686,6 +720,16 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                     Text("Entfernen")
                 }
             }
+            if (tile.shape.kind == TileKind.SIGNAL) {
+                Spacer(Modifier.size(8.dp))
+                AspectAddresses(tile)
+            }
         }
     }
 }
+
+/** Offenes Signalbild-Menue an einer Signalkachel im Betrieb. */
+internal class AspectOverlayData(val tile: TrackTile, val current: Int?, val onPick: (Int) -> Unit, val onDismiss: () -> Unit)
+
+private fun AspectOverlay(tile: TrackTile, current: Int?, onPick: (Int) -> Unit, onDismiss: () -> Unit) =
+    AspectOverlayData(tile, current, onPick, onDismiss)

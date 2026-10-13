@@ -45,7 +45,8 @@ import kotlinx.coroutines.delay
 private const val FLASH_MS = 500L
 
 /**
- * Fertige Signalbilder der EU-Laender (und der Schweiz): Land waehlen, Signalsystem waehlen,
+ * Fertige Signalbilder aus Deutschland, der Schweiz und den Niederlanden, Licht- und Formsignale:
+ * Land waehlen, Signalsystem waehlen,
  * alle Signalbilder ansehen und als eigenes Symbol uebernehmen.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -78,19 +79,12 @@ internal fun SignalBrowser(service: SymbolService, modifier: Modifier) {
                     )
                 }
             }
-            val without = SignalCatalog.countriesWithoutRailway
-            if (without.isNotEmpty()) {
-                Text(
-                    "Ohne Eisenbahnnetz und daher ohne Signale: ${without.values.joinToString()}.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (systems.size > 1) {
-                Text("Signalsystem", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val (light, form) = systems.partition { !it.semaphore }
+            for ((label, group) in listOf("Lichtsignale" to light, "Formsignale" to form)) {
+                if (group.isEmpty()) continue
+                Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    systems.forEach { s ->
+                    group.forEach { s ->
                         FilterChip(selected = s == system, onClick = { SymbolsUiState.system.value = s.id }, label = { Text(s.name) })
                     }
                 }
@@ -129,10 +123,10 @@ private fun SystemDetails(service: SymbolService, system: SignalSystem, flashOn:
         system.aspects.forEach { aspect -> AspectCard(system, aspect, flashOn) }
     }
     Text(
-        if (system.unchecked) {
-            "Farben und Bedeutungen nach Signalbuch, die Lampenanordnung ist vereinfacht und noch nicht anhand von Vorbildfotos geprüft."
-        } else {
-            "Farben und Bedeutungen nach Signalbuch geprüft, die Lampenanordnung ist vereinfacht."
+        when {
+            system.unchecked -> "Nach Fachwissen gezeichnet, noch nicht anhand von Signalbuch oder Vorbildfotos geprüft."
+            system.semaphore -> "Tagesbild nach Signalbuch, vereinfacht gezeichnet."
+            else -> "Farben und Bedeutungen nach Signalbuch, die Lampenanordnung ist vereinfacht."
         },
         style = MaterialTheme.typography.bodySmall,
         color = if (system.unchecked) Moba.colors.occupied else MaterialTheme.colorScheme.onSurfaceVariant,

@@ -10,6 +10,7 @@ import de.moba.core.station.CommandStation
 import de.moba.core.station.StationEvent
 import de.moba.modules.trackplan.api.Branch
 import de.moba.modules.trackplan.api.LicenseRequiredException
+import de.moba.modules.trackplan.api.SignalAddressing
 import de.moba.modules.trackplan.api.TRACKPLAN_MODULE_ID
 import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackPlan
@@ -96,6 +97,9 @@ internal class TrackPlanServiceImpl(
     private val _turnouts = MutableStateFlow<Map<Int, Boolean>>(emptyMap())
     override val turnouts: StateFlow<Map<Int, Boolean>> = _turnouts
 
+    private val _aspects = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    override val signalAspects: StateFlow<Map<Int, Int>> = _aspects
+
     private val _occupied = MutableStateFlow<Set<Pair<Int, Int>>>(emptySet())
     override val occupied: StateFlow<Set<Pair<Int, Int>>> = _occupied
 
@@ -167,8 +171,8 @@ internal class TrackPlanServiceImpl(
             } else {
                 station.setTurnout(address, thrown = _turnouts.value[address] != true)
             }
-            // Signale: abzweigend = Halt (rot), gerade = Fahrt (gruen)
-            TileKind.SIGNAL -> station.setTurnout(address, thrown = _turnouts.value[address] == false)
+            // Signale: zwischen Halt (Bild 0) und Fahrt (Bild 1) wechseln, weitere Bilder ueber setAspect
+            TileKind.SIGNAL -> setAspect(tile, if (currentAspect(address) == 0) 1 else 0)
             // Symbole: an/aus umschalten (Zustand 1 bzw. 0)
             TileKind.SYMBOL -> station.setTurnout(address, thrown = _turnouts.value[address] != true)
             TileKind.UNCOUPLER -> {
@@ -180,7 +184,30 @@ internal class TrackPlanServiceImpl(
         }
     }
 
-    fun onTurnout(address: Int, thrown: Boolean) = _turnouts.update { it + (address to thrown) }
+    private fun currentAspect(base: Int): Int = _aspects.value[base] ?: if (_turnouts.value[base] == false) 1 else 0
+
+    override suspend fun setAspect(tile: TrackTile, aspect: Int) {
+        val base = tile.address ?: return
+        require(aspect in 0 until SignalAddressing.MAX_ASPECTS) { "Signalbild $aspect gibt es nicht" }
+        val (address, thrown) = SignalAddressing.output(base, aspect)
+        station.setTurnout(address, thrown)
+        _aspects.update { it + (base to aspect) }
+    }
+
+    fun onTurnout(address: Int, thrown: Boolean) {
+        _turnouts.update { it + (address to thrown) }
+        // Gehoert die Adresse zu einem Signal? Dann das naechstliegende Signal mit kleinerer Grundadresse.
+        val tiles = repository.plans.value.flatMap { it.tiles }
+        val usedElsewhere = tiles.any { t ->
+            val a = t.address
+            t.shape.kind != TileKind.SIGNAL && a != null && address in a until a + t.shape.addressCount
+        }
+        if (usedElsewhere) return
+        val base = tiles.filter { it.shape.kind == TileKind.SIGNAL }.mapNotNull { it.address }
+            .filter { it <= address && address - it < SignalAddressing.MAX_ASPECTS / 2 }
+            .maxOrNull() ?: return
+        _aspects.update { it + (base to SignalAddressing.aspect(base, address, thrown)) }
+    }
 
     fun onFeedback(module: Int, contact: Int, occupied: Boolean) = _occupied.update {
         if (occupied) it + (module to contact) else it - (module to contact)

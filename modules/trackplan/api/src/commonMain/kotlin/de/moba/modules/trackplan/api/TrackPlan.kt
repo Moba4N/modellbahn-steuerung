@@ -173,3 +173,19 @@ fun TrackTile.activeBranch(turnouts: Map<Int, Boolean>): Branch? {
         else -> turnouts[a]?.let { if (it) Branch.RIGHT else Branch.MAIN }
     }
 }
+
+/**
+ * Signalbilder schalten wie bei iTrain mit Adresspaaren (z. B. Viessmann-Multiplexer):
+ * Bild 0 = Grundadresse rot, Bild 1 = Grundadresse gruen, Bild 2 = Adresse + 1 rot, Bild 3 = Adresse + 1 gruen usw.
+ * "rot" ist an der Zentrale "abzweigend".
+ */
+object SignalAddressing {
+    /** Hoechstens so viele Signalbilder lassen sich schalten (vier Adressen). */
+    const val MAX_ASPECTS = 8
+
+    /** Adresse und Stellung (true = rot/abzweigend) fuer ein Signalbild. */
+    fun output(base: Int, aspect: Int): Pair<Int, Boolean> = (base + aspect / 2) to (aspect % 2 == 0)
+
+    /** Welches Signalbild eine gemeldete Weichenstellung bedeutet. */
+    fun aspect(base: Int, address: Int, thrown: Boolean): Int = (address - base) * 2 + if (thrown) 0 else 1
+}

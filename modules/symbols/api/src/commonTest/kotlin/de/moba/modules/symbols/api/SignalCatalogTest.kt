@@ -6,9 +6,24 @@ import kotlin.test.assertTrue
 
 class SignalCatalogTest {
     @Test
-    fun everyEuCountryWithRailwayHasSignals() {
-        val covered = SignalCatalog.countries.toSet() + SignalCatalog.countriesWithoutRailway.keys
-        assertEquals(COUNTRY_NAMES.keys, covered)
+    fun onlyGermanySwitzerlandAndNetherlands() {
+        assertEquals(setOf("DE", "CH", "NL"), SignalCatalog.countries.toSet())
+    }
+
+    @Test
+    fun everyCountryHasSemaphores() {
+        for (country in SignalCatalog.countries) {
+            assertTrue(SignalCatalog.forCountry(country).any { it.semaphore }, country)
+        }
+    }
+
+    @Test
+    fun semaphoreArmMovesBetweenStopAndClear() {
+        val hp = SignalCatalog.system("de-form-hp2")!!
+        val stop = SignalSymbols.render(hp, hp.stop, 32)
+        val clear = SignalSymbols.render(hp, hp.clear, 32)
+        assertTrue(stop != clear)
+        assertEquals("Hp 1", hp.clear.name)
     }
 
     @Test

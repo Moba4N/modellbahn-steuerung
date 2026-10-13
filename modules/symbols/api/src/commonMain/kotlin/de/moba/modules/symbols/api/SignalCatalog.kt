@@ -1,11 +1,8 @@
 package de.moba.modules.symbols.api
 
-/** Alle mitgelieferten Signalsysteme, nach Land sortiert. Die Daten stehen in [SignalData]. */
+/** Alle mitgelieferten Signalsysteme (Deutschland, Schweiz, Niederlande), Licht- und Formsignale. */
 object SignalCatalog {
-    val systems: List<SignalSystem> get() = SignalData.systems
-
-    /** Laender ohne eigenes Eisenbahnnetz (keine Signale noetig). */
-    val countriesWithoutRailway: Map<String, String> get() = SignalData.countriesWithoutRailway
+    val systems: List<SignalSystem> by lazy { SignalData.systems + FormSignalData.systems }
 
     /** Laendercodes mit Signalsystemen, nach deutschem Namen sortiert. */
     val countries: List<String> get() = systems.map { it.country }.distinct().sortedBy { COUNTRY_NAMES[it] ?: it }

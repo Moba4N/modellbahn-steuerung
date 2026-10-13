@@ -44,8 +44,14 @@ interface TrackPlanService {
     /** Belegte Rueckmelder als (s88-Modul, Kontakt). */
     val occupied: StateFlow<Set<Pair<Int, Int>>>
 
+    /** Aktuelles Signalbild je Signal-Grundadresse (Index in der Bildliste, 0 = Halt). */
+    val signalAspects: StateFlow<Map<Int, Int>>
+
     /** Schaltet die Weiche oder das Signal einer Kachel in die naechste Stellung. */
     suspend fun operate(tile: TrackTile)
+
+    /** Stellt ein Signal auf ein bestimmtes Signalbild, Adressen nach [SignalAddressing]. */
+    suspend fun setAspect(tile: TrackTile, aspect: Int)
 }
 
 class LicenseRequiredException(message: String) : Exception(message)

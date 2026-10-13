@@ -38,7 +38,7 @@ class SymbolRepository(private val store: SymbolStore?) {
 
 /**
  * Modul "Symbole": eigene Pixelsymbole zeichnen wie im Symbol-Editor von TrainController,
- * dazu die Signalbilder der EU-Laender. Zeichnen ist kostenlos, Speichern gibt es ab Pro.
+ * dazu Licht- und Formsignale aus Deutschland, der Schweiz und den Niederlanden. Zeichnen ist kostenlos, Speichern gibt es ab Pro.
  */
 class SymbolModule(private val repository: SymbolRepository) : MobaModule {
     override val id = SYMBOLS_MODULE_ID

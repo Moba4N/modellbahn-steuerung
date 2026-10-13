@@ -117,4 +117,27 @@ class TrackPlanModuleTest {
         advanceUntilIdle()
         assertEquals(setOf(2 to 5), service.occupied.value)
     }
+
+    @Test
+    fun signalsSwitchAspectsWithAddressPairs() = runTest {
+        val station = SimulatorStation()
+        val service = start(LicenseInfo.FREE, station = station)
+        val signal = TrackTile(4, 2, TrackShape.SIGNAL, address = 40, symbol = "signal:de-ks")
+        service.update(service.plans.value.first().put(signal))
+
+        service.setAspect(signal, 3)
+        advanceUntilIdle()
+        assertEquals(false, service.turnouts.value[41])
+        assertEquals(3, service.signalAspects.value[40])
+
+        // Meldung von der Zentrale (z. B. Handregler): Adresse 40 rot = Halt
+        station.setTurnout(40, thrown = true)
+        advanceUntilIdle()
+        assertEquals(0, service.signalAspects.value[40])
+
+        service.operate(signal)
+        advanceUntilIdle()
+        assertEquals(1, service.signalAspects.value[40])
+        assertEquals(false, service.turnouts.value[40])
+    }
 }

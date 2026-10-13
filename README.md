@@ -26,7 +26,7 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und 
 | `modules/vehicles` | Modul "Fahrzeuge": Loks, Gueterwagen- und Personenwagengattungen anlegen |
 | `modules/decoder` | Modul "Decoder": CV-Programmierung und Decoder-Datenbank |
 | `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
-| `modules/symbols` | Modul "Symbole": Pixel-Editor fuer eigene Symbole und Signalbilder der EU-Laender |
+| `modules/symbols` | Modul "Symbole": Pixel-Editor fuer eigene Symbole, Licht- und Formsignale (DE, CH, NL) |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
 | `tools/sandbox` | Startet Kern, Simulator und Beispielmodule auf der Konsole |
@@ -125,8 +125,13 @@ An echter Hardware ist es noch nicht geprueft.
 Der Editor arbeitet auf einem Raster mit 45-Grad-Schritten. Gleisformen: Gerade, Kurve 45°, Bogen 90°,
 Weiche links/rechts, Y-Weiche, Dreiwegweiche, Kreuzung 90° und 45°, einfache und doppelte Kreuzungsweiche,
 Prellbock, Signal, Rueckmelder (s88-Modul und Kontakt), Entkuppler, Text und Symbol.
-Einem Signal laesst sich ein Signalbild aus dem Katalog oder ein eigenes Signalsymbol zuweisen; es zeigt dann
-im Betrieb Halt bzw. Fahrt. Eine Symbolkachel zeigt ein eigenes Symbol, mit Schaltadresse wechselt sie zwischen
+Signale arbeiten wie in iTrain: Jedem Signal laesst sich ein Signaltyp aus dem Katalog oder ein eigenes
+Signalsymbol zuweisen. Es steht neben dem Gleis und dreht sich mit ihm. Im Betrieb oeffnet ein Klick auf ein
+Signal mit mehr als zwei Bildern die Liste aller Signalbilder; Signale mit zwei Bildern wechseln direkt.
+Geschaltet wird mit Adresspaaren ab der eingetragenen Grundadresse: Bild 1 = Adresse rot, Bild 2 = Adresse gruen,
+Bild 3 = Adresse + 1 rot, Bild 4 = Adresse + 1 gruen usw. (bis 8 Bilder). Die Zuordnung steht im Editor
+unter dem Signal. Meldet die Zentrale eine dieser Adressen, zeigt das Gleisbild das passende Bild.
+Eine Symbolkachel zeigt ein eigenes Symbol, mit Schaltadresse wechselt sie zwischen
 erstem (aus) und zweitem Zustand (an).
 Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelder leuchten orange.
 
@@ -147,11 +152,13 @@ mit mehreren Zustaenden, z. B. "aus" und "an" oder je Signalbild einer. Werkzeug
 Rechteck, Ellipse (je offen und gefuellt), Flaeche fuellen, Farbe aufnehmen; dazu Spiegeln, Drehen,
 Verschieben, Rueckgaengig/Wiederholen, Palette mit Signalfarben und eigene Farbe als Hex-Wert.
 
-Unter "Signalbilder EU" stehen 47 Signalsysteme aus allen EU-Laendern mit Eisenbahn und der Schweiz
-(Zypern und Malta haben kein Bahnnetz). Jedes System laesst sich als eigenes Symbol uebernehmen und weiter anpassen.
-Farben und Bedeutungen folgen den Signalbuechern; die Lampenanordnung ist vereinfacht und fuer
-AT, LU, IE, ES, PT, GR, CZ, SK, HU, EE, LV, LT, BG, RO, HR, SI und DK noch nicht anhand von Vorbildfotos geprueft
-(in der App markiert). Die Daten stehen in `modules/symbols/api/.../SignalData.kt`.
+Unter "Signalbilder" stehen Signale aus Deutschland, der Schweiz und den Niederlanden:
+Lichtsignale (H/V, Ks, Hl, Sh; SBB System L und N, Zwergsignal; NS-Lichtsein) und Formsignale
+(Formhaupt- und Formvorsignal ein- und zweifluegelig, Formsperrsignal; SBB-Formsignale und NS-Armsein, historisch).
+Jedes System laesst sich als eigenes Symbol uebernehmen und weiter anpassen.
+Farben und Bedeutungen folgen den Signalbuechern, die Darstellung ist vereinfacht. Die Schweizer Formsignale
+und das NS-Armsein sind nach Fachwissen gezeichnet und noch nicht anhand von Vorbildern geprueft (in der App markiert).
+Daten: `SignalData.kt` (Lichtsignale) und `FormSignalData.kt` (Formsignale) in `modules/symbols/api`.
 
 | | Kostenlos | Basis | Pro / Club |
 |---|---|---|---|

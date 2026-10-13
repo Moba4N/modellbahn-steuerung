@@ -1,6 +1,7 @@
 package de.moba.modules.trackplan.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -21,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.moba.modules.symbols.api.COUNTRY_NAMES
@@ -30,6 +32,7 @@ import de.moba.modules.symbols.api.SignalSymbols
 import de.moba.modules.symbols.api.SymbolCategory
 import de.moba.modules.symbols.api.SymbolDef
 import de.moba.modules.symbols.ui.SymbolImage
+import de.moba.modules.trackplan.api.SignalAddressing
 import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackTile
 
@@ -39,28 +42,92 @@ internal const val SIGNAL_PREFIX = "signal:"
 /** Die eigenen Symbole aus dem Modul "Symbole"; leer, wenn das Modul fehlt. */
 internal val LocalSymbolLibrary = compositionLocalOf<List<SymbolDef>> { emptyList() }
 
+/** Ein schaltbares Bild einer Signal- oder Symbolkachel. */
+internal class TileState(val name: String, val meaning: String, val image: PixelImage)
+
 /** Gerenderte Signalbilder, damit sie nicht bei jedem Zeichnen neu entstehen. */
-private val signalCache = HashMap<Pair<String, Int>, PixelImage>()
+private val signalCache = HashMap<String, List<TileState>>()
 
 private const val SIGNAL_PIXELS = 32
 
 /**
- * Bild einer Kachel mit Symbol, passend zum Schaltzustand:
- * Signale zeigen bei "abzweigend" oder unbekannt den Haltbegriff, bei "gerade" den Fahrbegriff;
- * andere Symbole zeigen ausgeschaltet den ersten, eingeschaltet den zweiten Zustand.
+ * Alle Bilder einer Kachel in Schaltreihenfolge: bei Signalen aus dem Katalog Halt, Fahrt, dann die uebrigen
+ * Signalbilder; bei eigenen Symbolen die Zustaende. Leer ohne gewaehltes Symbol.
  */
-internal fun symbolImage(tile: TrackTile, turnouts: Map<Int, Boolean>, library: List<SymbolDef>): PixelImage? {
-    if (tile.symbol.isBlank()) return null
-    val thrown = tile.address?.let { turnouts[it] }
-    val signal = tile.shape.kind == TileKind.SIGNAL
-    val index = if (signal) (if (thrown == false) 1 else 0) else (if (thrown == true) 1 else 0)
+internal fun tileStates(tile: TrackTile, library: List<SymbolDef>): List<TileState> {
+    if (tile.symbol.isBlank()) return emptyList()
     if (tile.symbol.startsWith(SIGNAL_PREFIX)) {
-        val system = SignalCatalog.system(tile.symbol.removePrefix(SIGNAL_PREFIX)) ?: return null
-        val aspect = if (index == 1) system.clear else system.stop
-        return signalCache.getOrPut(system.id to index) { SignalSymbols.render(system, aspect, SIGNAL_PIXELS) }
+        val system = SignalCatalog.system(tile.symbol.removePrefix(SIGNAL_PREFIX)) ?: return emptyList()
+        return signalCache.getOrPut(system.id) {
+            system.ordered.take(SignalAddressing.MAX_ASPECTS).map { TileState(it.name, it.meaning, SignalSymbols.render(system, it, SIGNAL_PIXELS)) }
+        }
     }
-    val def = library.firstOrNull { it.id == tile.symbol } ?: return null
-    return def.states.getOrElse(index) { def.states.first() }.image
+    val def = library.firstOrNull { it.id == tile.symbol } ?: return emptyList()
+    return def.states.take(SignalAddressing.MAX_ASPECTS).map { TileState(it.name, "", it.image) }
+}
+
+/**
+ * Bild einer Kachel mit Symbol, passend zum Schaltzustand: Signale zeigen ihr aktuelles Signalbild
+ * (unbekannt = Halt), andere Symbole ausgeschaltet den ersten, eingeschaltet den zweiten Zustand.
+ */
+internal fun symbolImage(
+    tile: TrackTile,
+    turnouts: Map<Int, Boolean>,
+    aspects: Map<Int, Int>,
+    library: List<SymbolDef>,
+): PixelImage? {
+    val states = tileStates(tile, library)
+    if (states.isEmpty()) return null
+    val address = tile.address
+    val index = when {
+        address == null -> 0
+        tile.shape.kind == TileKind.SIGNAL -> aspects[address] ?: if (turnouts[address] == false) 1 else 0
+        else -> if (turnouts[address] == true) 1 else 0
+    }
+    return states.getOrElse(index) { states.first() }.image
+}
+
+/** Auswahl des Signalbilds wie in iTrain: alle Bilder mit Vorschau und Adresse. */
+@Composable
+internal fun AspectMenu(tile: TrackTile, current: Int?, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+    val states = tileStates(tile, LocalSymbolLibrary.current)
+    val base = tile.address ?: return
+    DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
+        states.forEachIndexed { i, state ->
+            DropdownMenuItem(
+                leadingIcon = { SymbolImage(state.image, Modifier.size(36.dp)) },
+                text = {
+                    Column {
+                        Text(state.name, fontWeight = if (i == current) FontWeight.Bold else FontWeight.Normal)
+                        Text(
+                            listOf(state.meaning, outputLabel(base, i)).filter { it.isNotBlank() }.joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                onClick = { onPick(i) },
+            )
+        }
+    }
+}
+
+internal fun outputLabel(base: Int, aspect: Int): String {
+    val (address, red) = SignalAddressing.output(base, aspect)
+    return "Adresse $address ${if (red) "rot" else "grün"}"
+}
+
+/** Welche Adresse jedes Signalbild schaltet, fuer die Eigenschaften im Editor. */
+@Composable
+internal fun AspectAddresses(tile: TrackTile) {
+    val base = tile.address ?: return
+    val states = tileStates(tile, LocalSymbolLibrary.current)
+    if (states.size < 2) return
+    Text(
+        states.mapIndexed { i, s -> "${s.name}: ${outputLabel(base, i).removePrefix("Adresse ")}" }.joinToString("  ·  "),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 private fun label(symbol: String, library: List<SymbolDef>): String = when {
@@ -78,7 +145,7 @@ internal fun SymbolChooser(tile: TrackTile, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick = { open = true }) {
-            symbolImage(tile, emptyMap(), library)?.let { SymbolImage(it, Modifier.size(22.dp)) }
+            symbolImage(tile, emptyMap(), emptyMap(), library)?.let { SymbolImage(it, Modifier.size(22.dp)) }
             Spacer(Modifier.width(6.dp))
             Text(
                 (if (signal) "Signalbild: " else "Symbol: ") + label(tile.symbol, library),
@@ -107,7 +174,7 @@ internal fun SymbolChooser(tile: TrackTile, onPick: (String) -> Unit) {
             if (signal) {
                 HorizontalDivider()
                 Text(
-                    "Signalbilder EU",
+                    "Signalbilder Deutschland, Schweiz, Niederlande",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

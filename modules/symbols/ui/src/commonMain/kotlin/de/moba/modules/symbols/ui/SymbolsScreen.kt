@@ -76,7 +76,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 enum class SymbolsTab(val label: String) {
     OWN("Eigene Symbole"),
-    SIGNALS("Signalbilder EU"),
+    SIGNALS("Signalbilder"),
 }
 
 /** Zustand des Symbol-Editors, bleibt beim Wechsel zwischen den Reitern erhalten. */
@@ -115,7 +115,7 @@ internal fun SymbolService.edit(before: SymbolDef, after: SymbolDef) {
     update(after)
 }
 
-/** Reiter "Symbole": eigene Pixelsymbole zeichnen (wie TrainController) und fertige Signalbilder der EU-Laender. */
+/** Reiter "Symbole": eigene Pixelsymbole zeichnen (wie TrainController) und fertige Licht- und Formsignale aus Deutschland, der Schweiz und den Niederlanden. */
 object SymbolsScreen : ModuleScreen {
     override val moduleId = SYMBOLS_MODULE_ID
     override val title = "Symbole"
@@ -234,7 +234,7 @@ private fun EmptyHint() {
         Spacer(Modifier.size(8.dp))
         Text("Symbol links auswählen oder neu anlegen.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            "Fertige Signale gibt es unter „Signalbilder EU“.",
+            "Fertige Licht- und Formsignale gibt es unter „Signalbilder“.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )

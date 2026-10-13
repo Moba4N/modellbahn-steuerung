@@ -28,13 +28,41 @@ data class LitLamp(val col: Int, val row: Int, val color: LampColor, val flash: 
 /** Zusatzanzeiger, z. B. Geschwindigkeitskennziffer "6" (Zs 3). */
 data class Indicator(val text: String, val color: LampColor = LampColor.WHITE)
 
-/** Ein Signalbild, z. B. "Hp 1 – Fahrt". */
+/** Stellung eines Formsignal-Fluegels. */
+enum class ArmPosition {
+    /** Waagrecht nach rechts: Halt. */
+    HORIZONTAL,
+
+    /** Schraeg nach rechts oben (45 Grad): Fahrt. */
+    UP,
+
+    /** Senkrecht am Mast anliegend, also nicht sichtbar gestellt. */
+    HANGING,
+}
+
+/** Ein bewegliches Teil eines Formsignals in einem Signalbild. */
+sealed interface FormPart {
+    /** Hauptsignal-Fluegel; [slot] 0 ist der obere, 1 der untere. */
+    data class Arm(val slot: Int, val position: ArmPosition) : FormPart
+
+    /** Gelbe Vorsignalscheibe: zugewandt ([facing]) oder waagrecht umgeklappt. */
+    data class Disc(val facing: Boolean) : FormPart
+
+    /** Zusatzfluegel am Vorsignal: schraeg nach rechts unten ([diagonal]) oder senkrecht am Mast. */
+    data class Wing(val diagonal: Boolean) : FormPart
+
+    /** Runde Scheibe des Formsperrsignals: Balken waagrecht (Sh 0) oder schraeg nach rechts oben (Sh 1). */
+    data class ShuntDisc(val clear: Boolean) : FormPart
+}
+
+/** Ein Signalbild, z. B. "Hp 1 – Fahrt". Lichtsignale nutzen [lit], Formsignale [form]. */
 data class SignalAspect(
     val id: String,
     val name: String,
     val meaning: String,
-    val lit: List<LitLamp>,
+    val lit: List<LitLamp> = emptyList(),
     val indicator: Indicator? = null,
+    val form: List<FormPart> = emptyList(),
 )
 
 /** Ein Signalsystem eines Landes mit Lampenanordnung und allen Signalbildern. */
@@ -68,8 +96,11 @@ data class SignalSystem(
     /** Halt und Fahrt zuerst, dann alle uebrigen Bilder in Katalogreihenfolge. */
     val ordered: List<SignalAspect> get() = (listOf(stop, clear) + aspects).distinct()
 
-    /** Lampenanordnung nicht anhand von Quellen geprueft (siehe README). */
-    val unchecked: Boolean get() = country in SignalData.uncheckedCountries
+    /** Formsignal mit Fluegeln und Scheiben statt Lampen. */
+    val semaphore: Boolean get() = aspects.any { it.form.isNotEmpty() }
+
+    /** Darstellung nicht anhand von Quellen geprueft (siehe README). */
+    val unchecked: Boolean get() = id in FormSignalData.uncheckedSystems
 }
 
 /** Deutsche Laendernamen fuer die Auswahl. */
@@ -106,6 +137,7 @@ object SignalSymbols {
      * Mit [flashOn] = false sind blinkende Lampen gerade dunkel.
      */
     fun render(system: SignalSystem, aspect: SignalAspect?, size: Int, flashOn: Boolean = true): PixelImage {
+        if (system.semaphore) return FormSignals.render(aspect ?: system.stop, size)
         val margin = size / 16.0
         val mastHeight = size / 6.0
         val availW = size - 2 * margin
