@@ -172,19 +172,21 @@ fun MobaShell(
                         }
                     }
                     if (!wide) {
+                        // Ab sechs Eintraegen kleinere Beschriftung, damit nichts umbricht
+                        val compact = visible.size + 1 > 5
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                             NavigationBarItem(
                                 selected = current == OVERVIEW,
                                 onClick = { current = OVERVIEW },
                                 icon = { Icon(Icons.Outlined.Dashboard, null) },
-                                label = { Text("Übersicht") },
+                                label = { NavLabel("Übersicht", compact) },
                             )
                             visible.forEach { screen ->
                                 NavigationBarItem(
                                     selected = current == screen.moduleId,
                                     onClick = { current = screen.moduleId },
                                     icon = { Icon(screen.icon, null) },
-                                    label = { Text(screen.title) },
+                                    label = { NavLabel(screen.title, compact) },
                                 )
                             }
                         }
@@ -348,4 +350,15 @@ private fun BurgerMenu(
             )
         }
     }
+}
+
+@Composable
+private fun NavLabel(text: String, compact: Boolean) {
+    Text(
+        text,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+    )
 }

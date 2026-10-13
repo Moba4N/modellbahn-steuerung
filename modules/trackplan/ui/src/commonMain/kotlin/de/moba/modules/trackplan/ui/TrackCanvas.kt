@@ -248,8 +248,8 @@ internal fun DrawScope.drawTile(
         }
         TileKind.SIGNAL -> if (image != null) {
             // Gewaehltes Signalbild neben dem Gleis, immer aufrecht
-            val side = cell * 0.62f
-            val center = c + across * (cell * 0.28f)
+            val side = cell * 0.9f
+            val center = c + across * (cell * 0.3f)
             drawPixels(image, origin = Offset(center.x - side / 2, center.y - side / 2), side = side)
         } else {
             val lamp = when (tile.address?.let { state.turnouts[it] }) {
