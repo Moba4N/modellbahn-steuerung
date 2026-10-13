@@ -39,8 +39,9 @@ import de.moba.core.runtime.License
 
 /** Was ohne und mit Lizenz freigeschaltet ist; erscheint im Lizenzdialog. */
 private val EDITIONS = listOf(
-    "Kostenlos" to "Fahren, alle Zentralen, CV-Programmierung, je 3 Fahrzeuge, Gleisbild ansehen",
-    "Pro" to "Gleisbilder speichern, bis zu 3 Gleisbilder gleichzeitig, unbegrenzt Fahrzeuge",
+    "Kostenlos" to "3 Loks fahren, alle Zentralen, CV-Programmierung, je 3 Fahrzeuge, Gleisbild zeichnen",
+    "Basis" to "Beliebig viele Loks fahren, Gleisbilder speichern",
+    "Pro" to "Alles aus Basis, bis zu 3 Gleisbilder gleichzeitig, unbegrenzt Fahrzeuge",
     "Decoder-Datenbank" to "Decoder-Programmierungen speichern und wieder aufspielen",
     "Club" to "Alles aus Pro und Decoder-Datenbank",
 )

@@ -18,7 +18,7 @@ Lizenzwerkzeug der Modellbahn-Steuerung
       den oeffentlichen Schluessel in ManufacturerKey.kt eintragen.
 
   erstellen --privat <privat.key> --name "<Kunde>" --module pro,decoder [--bis JJJJ-MM-TT] [--id <Nummer>]
-      Erstellt einen Lizenzschluessel fuer einen Kunden. Module: pro, club, decoder.
+      Erstellt einen Lizenzschluessel fuer einen Kunden. Module: basis, pro, club, decoder.
 
   pruefen <Lizenzschluessel>
       Prueft einen Schluessel mit dem eingebauten oeffentlichen Schluessel.
@@ -26,7 +26,7 @@ Lizenzwerkzeug der Modellbahn-Steuerung
 Aufruf ueber Gradle: ./gradlew :tools:license:run --args="erstellen --privat ..."
 """
 
-private val KNOWN_FEATURES = setOf("pro", "club", "decoder")
+private val KNOWN_FEATURES = setOf("basis", "pro", "club", "decoder")
 
 fun main(args: Array<String>) {
     val command = args.firstOrNull() ?: fail(USAGE)

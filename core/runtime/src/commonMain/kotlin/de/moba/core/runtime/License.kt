@@ -14,14 +14,24 @@ data class License(
     val issued: String,
     val expires: String = "",
 ) {
+    /** Freischaltungen einschliesslich der enthaltenen Stufen (Club enthaelt Pro, Pro enthaelt Basis). */
+    val unlockedKeys: Set<String> get() = features + features.flatMap { INCLUDES[it].orEmpty() }
+
     /** Lesbare Namen der Freischaltungen fuer die Anzeige. */
     val featureLabels: List<String> get() = features.sorted().map { FEATURE_LABELS[it] ?: it }
 
     companion object {
         val FEATURE_LABELS = mapOf(
+            "basis" to "Basis",
             "pro" to "Pro",
             "club" to "Club",
             "decoder" to "Decoder-Datenbank",
+        )
+
+        /** Welche Stufen eine Lizenz zusaetzlich enthaelt. */
+        val INCLUDES = mapOf(
+            "pro" to setOf("basis"),
+            "club" to setOf("basis", "pro", "decoder"),
         )
     }
 }
@@ -42,7 +52,7 @@ fun interface LicenseVerifier {
 fun LicenseInfo.plus(license: License?): LicenseInfo {
     if (license == null) return this
     val base = this
-    return LicenseInfo { key -> base.isUnlocked(key) || key in license.features }
+    return LicenseInfo { key -> base.isUnlocked(key) || key in license.unlockedKeys }
 }
 
 /**

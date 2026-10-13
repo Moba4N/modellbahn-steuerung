@@ -59,6 +59,12 @@ class LicenseTest {
         assertTrue(info.isUnlocked("pro"))
         assertTrue(info.isUnlocked("decoder"))
         assertFalse(info.isUnlocked("club"))
+        assertTrue(info.isUnlocked("basis"))
+        val club = LicenseInfo.FREE.plus(license.copy(features = setOf("club")))
+        assertTrue(listOf("basis", "pro", "decoder", "club").all(club::isUnlocked))
+        val basis = LicenseInfo.FREE.plus(license.copy(features = setOf("basis")))
+        assertTrue(basis.isUnlocked("basis"))
+        assertFalse(basis.isUnlocked("pro"))
         assertFalse(LicenseInfo.FREE.plus(null).isUnlocked("pro"))
     }
 }

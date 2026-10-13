@@ -361,11 +361,11 @@ private fun EditorToolbar(service: TrackPlanService, plans: List<TrackPlan>, pla
             }
         } else {
             OutlinedButton(onClick = {
-                say("Speichern gibt es mit jedem Abo (ab Basis). Zeichnen und Ausprobieren bleiben kostenlos.")
+                say("Speichern gibt es ab der Basis-Lizenz (Burger-Menü, „Lizenz …“). Zeichnen und Ausprobieren bleiben kostenlos.")
             }) {
                 Icon(Icons.Filled.Lock, null, tint = Moba.colors.locked, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Speichern ab Basis-Abo")
+                Text("Speichern ab Basis-Lizenz")
             }
         }
     }

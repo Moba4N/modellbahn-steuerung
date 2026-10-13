@@ -159,7 +159,7 @@ in `apps/desktop/packaging/msix`.
 
 ## Lizenzen
 
-Ohne Lizenz laeuft die kostenlose Version. Freischaltungen: `pro`, `decoder` (Decoder-Datenbank), `club` (alles).
+Ohne Lizenz laeuft die kostenlose Version. Freischaltungen: `basis`, `pro` (enthaelt Basis), `decoder` (Decoder-Datenbank), `club` (alles).
 Ein Lizenzschluessel (`MOBA1-...`) ist mit ECDSA P-256 unterschrieben und wird in der App ohne Internet
 mit dem oeffentlichen Schluessel in `ManufacturerKey.kt` geprueft. Eingabe: Burger-Menue, "Lizenz ...".
 
