@@ -56,4 +56,19 @@ class TrackPlanTest {
         assertEquals(plans.map { it.copy(tiles = it.tiles.toSet().toList()) }.map { it.tiles.toSet() }, back.map { it.tiles.toSet() })
         assertEquals(plans.map { it.copy(tiles = emptyList()) }, back.map { it.copy(tiles = emptyList()) })
     }
+
+    @Test
+    fun fitToGrowsAndShrinksWithoutLosingTracks() {
+        val plan = TrackPlan("p", "Test", 40, 24)
+            .put(TrackTile(30, 10, TrackShape.STRAIGHT))
+            .put(TrackTile(5, 20, TrackShape.STRAIGHT))
+        val grown = plan.fitTo(60, 30)
+        assertEquals(60, grown.width)
+        assertEquals(30, grown.height)
+        val shrunk = plan.fitTo(12, 8)
+        assertEquals(31, shrunk.width)
+        assertEquals(21, shrunk.height)
+        assertEquals(2, shrunk.tiles.size)
+        assertEquals(TrackPlan.MIN_SIZE, TrackPlan("leer", "Leer").fitTo(1, 1).width)
+    }
 }
