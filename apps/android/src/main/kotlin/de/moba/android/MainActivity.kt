@@ -14,6 +14,7 @@ import de.moba.modules.driving.ui.DrivingScreen
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.symbols.ui.SymbolsScreen
 import de.moba.modules.vehicles.ui.VehiclesScreen
+import de.moba.modules.throttles.ui.ThrottleDock
 import de.moba.ui.shell.ExitGuard
 import de.moba.ui.shell.ImagePicker
 import de.moba.ui.shell.MobaShell
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
                 app,
                 screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen),
                 panels = listOf(DrivingPanel),
+                docks = listOf(ThrottleDock),
                 imagePicker = picker,
                 exitGuard = exitGuard,
                 onExit = ::finish,

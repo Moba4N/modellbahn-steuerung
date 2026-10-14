@@ -30,6 +30,10 @@ import de.moba.modules.vehicles.VehicleRepository
 import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.core.runtime.EcLicenseVerifier
 import de.moba.core.runtime.ManufacturerKey
+import de.moba.modules.throttles.FileThrottleBarStore
+import de.moba.modules.throttles.ThrottleBarModule
+import de.moba.modules.throttles.ThrottleBarRepository
+import de.moba.modules.throttles.ui.ThrottleDock
 import de.moba.ui.shell.ExitGuard
 import de.moba.ui.shell.ImagePicker
 import de.moba.ui.shell.ImageStore
@@ -54,6 +58,7 @@ private val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dataDir, "g
 private val vehicles = VehicleRepository(FileVehicleStore(File(dataDir, "fahrzeuge.txt")))
 private val symbols = SymbolRepository(FileSymbolStore(File(dataDir, "symbole.txt")))
 private val decoders = DecoderRepository(FileDecoderStore(File(dataDir, "decoder.txt")))
+private val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dataDir, "fahrregler.txt")))
 
 /** Hintergrundbild als Kopie im Datenordner, damit es auch nach Verschieben des Originals bleibt. */
 private object DesktopImageStore : ImageStore {
@@ -99,7 +104,7 @@ fun main() = application {
                 scope = scope,
                 drivers = StationCatalog.drivers,
                 discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols)) },
+                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar)) },
                 settings = DesktopSettings,
                 imageStore = DesktopImageStore,
                 licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
@@ -110,6 +115,7 @@ fun main() = application {
             app,
             screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen),
             panels = listOf(DrivingPanel),
+            docks = listOf(ThrottleDock),
             imagePicker = picker,
             exitGuard = exitGuard,
             onExit = ::exitApplication,

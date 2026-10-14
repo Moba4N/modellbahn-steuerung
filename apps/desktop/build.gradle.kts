@@ -26,6 +26,8 @@ dependencies {
     implementation(project(":modules:vehicles:impl"))
     implementation(project(":modules:symbols:ui"))
     implementation(project(":modules:symbols:impl"))
+    implementation(project(":modules:throttles:ui"))
+    implementation(project(":modules:throttles:impl"))
     implementation(project(":modules:decoder:ui"))
     implementation(project(":modules:decoder:impl"))
     implementation(project(":adapters:catalog"))

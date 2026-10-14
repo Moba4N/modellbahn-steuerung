@@ -18,6 +18,9 @@ import de.moba.modules.vehicles.VehicleModule
 import de.moba.modules.vehicles.VehicleRepository
 import de.moba.core.runtime.EcLicenseVerifier
 import de.moba.core.runtime.ManufacturerKey
+import de.moba.modules.throttles.FileThrottleBarStore
+import de.moba.modules.throttles.ThrottleBarModule
+import de.moba.modules.throttles.ThrottleBarRepository
 import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.SettingsStore
@@ -34,11 +37,12 @@ class MobaApplication : Application() {
         val vehicles = VehicleRepository(FileVehicleStore(File(filesDir, "fahrzeuge.txt")))
         val symbols = SymbolRepository(FileSymbolStore(File(filesDir, "symbole.txt")))
         val decoders = DecoderRepository(FileDecoderStore(File(filesDir, "decoder.txt")))
+        val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(filesDir, "fahrregler.txt")))
         MobaApp(
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
             drivers = StationCatalog.drivers,
             discovery = StationCatalog.discovery,
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols)) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar)) },
             settings = object : SettingsStore {
                 override fun get(key: String): String? = prefs.getString(key, null)
                 override fun set(key: String, value: String) = prefs.edit().putString(key, value).apply()
