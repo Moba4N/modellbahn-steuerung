@@ -111,6 +111,9 @@ object TrackPlanUiState {
     val selected = MutableStateFlow<Pair<Int, Int>?>(null)
     /** Groesse eines Gleissymbols in dp, im Betrieb und im Editor; bleibt ueber Neustarts erhalten. */
     val tileSize = MutableStateFlow(DEFAULT_TILE)
+
+    /** Groesse der Vorschaubilder in der Leiste "Gleisformen" in dp; bleibt ueber Neustarts erhalten. */
+    val paletteSize = MutableStateFlow(DEFAULT_PALETTE)
     val message = MutableStateFlow<String?>(null)
 
     /** Signalbild fuer neu gesetzte Signale: das zuletzt gewaehlte, anfangs das H/V-Lichthauptsignal. */
@@ -136,6 +139,12 @@ object TrackPlanScreen : ModuleScreen {
         LaunchedEffect(app) {
             app.preference(PREF_TILE_SIZE)?.toIntOrNull()?.let { TrackPlanUiState.tileSize.value = it.coerceIn(MIN_CELL, MAX_CELL) }
             TrackPlanUiState.tileSize.drop(1).collect { app.setPreference(PREF_TILE_SIZE, it.toString()) }
+        }
+        LaunchedEffect(app) {
+            app.preference(PREF_PALETTE_SIZE)?.toIntOrNull()?.let {
+                TrackPlanUiState.paletteSize.value = it.coerceIn(MIN_PALETTE, MAX_PALETTE)
+            }
+            TrackPlanUiState.paletteSize.drop(1).collect { app.setPreference(PREF_PALETTE_SIZE, it.toString()) }
         }
         val session by app.session.collectAsState()
         val service = session?.host?.service(TrackPlanService::class) ?: return
@@ -349,7 +358,8 @@ private fun ColumnScope.EditorView(service: TrackPlanService) {
     if (wide) {
         EditorToolbar(service, plans, plan)
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Palette(Modifier.width(200.dp).fillMaxHeight(), vertical = true)
+            val paletteSize by TrackPlanUiState.paletteSize.collectAsState()
+            Palette(Modifier.width((paletteSize + 176).dp).fillMaxHeight(), vertical = true)
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 EditorGrid(service, plan, Modifier.weight(1f).fillMaxWidth())
                 TileProperties(service, plan)
@@ -493,6 +503,8 @@ private fun NumberField(label: String, value: String, modifier: Modifier, onChan
 private fun Palette(modifier: Modifier, vertical: Boolean) {
     val tool by TrackPlanUiState.tool.collectAsState()
     val rotation by TrackPlanUiState.placeRotation.collectAsState()
+    val size by TrackPlanUiState.paletteSize.collectAsState()
+    val iconSize = (size * 2 / 3).coerceAtLeast(16)
     val tools = listOf(
         Triple(EditTool.Select, "Auswählen", Icons.Outlined.AdsClick),
         Triple(EditTool.Rotate, "Drehen", Icons.Outlined.Rotate90DegreesCw),
@@ -509,17 +521,17 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) { preview() }
+                Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) { preview() }
                 Spacer(Modifier.width(10.dp))
                 Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         } else {
             Column(
-                Modifier.width(76.dp).clip(MaterialTheme.shapes.small).background(bg).clickable(onClick = onClick)
+                Modifier.width(maxOf(76, size + 20).dp).clip(MaterialTheme.shapes.small).background(bg).clickable(onClick = onClick)
                     .padding(6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) { preview() }
+                Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) { preview() }
                 Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -528,15 +540,15 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
     val content: @Composable () -> Unit = {
         tools.forEach { (t, label, icon) ->
             item(tool == t, label, { TrackPlanUiState.tool.value = t }) {
-                Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(iconSize.dp))
             }
         }
         item(false, "Richtung", { TrackPlanUiState.placeRotation.value = (rotation + 1).mod(8) }) {
-            Icon(Icons.Outlined.Rotate90DegreesCcw, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Icon(Icons.Outlined.Rotate90DegreesCcw, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(iconSize.dp))
         }
         shapes.forEach { shape ->
             item(tool == EditTool.Place(shape), shape.label, { TrackPlanUiState.tool.value = EditTool.Place(shape) }) {
-                ShapePreview(TrackTile(0, 0, shape, if (shape == TrackShape.TEXT) 0 else rotation, text = "Abc"), 30.dp)
+                ShapePreview(TrackTile(0, 0, shape, if (shape == TrackShape.TEXT) 0 else rotation, text = "Abc"), size.dp)
             }
         }
     }
@@ -547,15 +559,21 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
                 Modifier.verticalScroll(rememberScrollState()).padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text("Gleisformen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.size(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Gleisformen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    PaletteSizeControl()
+                }
                 content()
             }
         } else {
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).padding(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) { content() }
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PaletteSizeControl()
+                content()
+            }
         }
     }
 }
@@ -670,6 +688,29 @@ internal const val MAX_CELL = 80
 internal const val DEFAULT_TILE = 24
 private const val TILE_STEP = 2
 private const val PREF_TILE_SIZE = "gleisbild.gleisgroesse"
+
+internal const val MIN_PALETTE = 20
+internal const val MAX_PALETTE = 64
+internal const val DEFAULT_PALETTE = 30
+private const val PREF_PALETTE_SIZE = "gleisbild.symbolgroesse"
+
+/** Symbole in der Leiste "Gleisformen" kleiner/groesser. */
+@Composable
+private fun PaletteSizeControl() {
+    val size by TrackPlanUiState.paletteSize.collectAsState()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(
+            enabled = size > MIN_PALETTE,
+            onClick = { TrackPlanUiState.paletteSize.value = (size - 4).coerceAtLeast(MIN_PALETTE) },
+            modifier = Modifier.size(32.dp),
+        ) { Icon(Icons.Filled.ZoomOut, "Symbole kleiner", modifier = Modifier.size(18.dp)) }
+        IconButton(
+            enabled = size < MAX_PALETTE,
+            onClick = { TrackPlanUiState.paletteSize.value = (size + 4).coerceAtMost(MAX_PALETTE) },
+            modifier = Modifier.size(32.dp),
+        ) { Icon(Icons.Filled.ZoomIn, "Symbole größer", modifier = Modifier.size(18.dp)) }
+    }
+}
 
 /** Gleisgroesse kleiner/groesser, gilt fuer Betrieb und Editor. */
 @Composable

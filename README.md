@@ -138,6 +138,7 @@ erstem (aus) und zweitem Zustand (an).
 Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelder leuchten orange.
 Die Gleisgroesse (8 bis 80, anfangs 24) laesst sich im Betrieb und im Editor mit Minus/Plus einstellen und bleibt
 gespeichert; "Einpassen" waehlt die Groesse, bei der das ganze Raster ins Fenster passt.
+Auch die Symbole in der Leiste "Gleisformen" lassen sich mit Minus/Plus verkleinern oder vergroessern (20 bis 64).
 Sind Gleisbilder beim Schliessen (Windows) oder Zurueck (Android) ungespeichert, fragt die App nach.
 
 | | Kostenlos | Basis | Pro / Club |
@@ -149,6 +150,11 @@ Sind Gleisbilder beim Schliessen (Windows) oder Zurueck (Android) ungespeichert,
 Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn-steuerung`,
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
+
+## Fahrpult
+
+Am PC ist das Fahrpult rechts anfangs ausgeblendet. Der Tacho-Knopf oben neben "Gleis an/aus" blendet es ein
+und aus; die Wahl bleibt gespeichert. Ohne eingeblendetes Fahrpult zeigt der Reiter "Fahren" es ueber der Lokliste.
 
 ## Mehrere Fahrregler
 

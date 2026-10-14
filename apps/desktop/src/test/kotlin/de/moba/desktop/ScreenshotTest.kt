@@ -448,6 +448,25 @@ class ScreenshotTest {
         }
         pro.session.value!!.host.service(CalibrationService::class)!!.cancel()
 
+        // Fahrpult rechts eingeblendet (anfangs aus) und groessere Symbole in der Leiste "Gleisformen"
+        app.setDarkTheme(true)
+        app.setPreference("shell.fahrpult", "an")
+        render("pc-fahrpult-eingeblendet-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        app.setPreference("shell.fahrpult", "aus")
+        render("pc-fahren-ohne-fahrpult-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        app.setPreference("gleisbild.symbolgroesse", "48")
+        TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
+        TrackPlanUiState.editPlan.value = null
+        render("pc-gleisformen-gross-dunkel", 1440, 900, 1f) {
+            MobaShell(app, withDecoder, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        app.setPreference("gleisbild.symbolgroesse", "30")
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)
         ShellUiState.licenseOpen.value = true

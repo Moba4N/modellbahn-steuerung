@@ -49,6 +49,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.FilledTonalIconToggleButton
+import androidx.compose.material.icons.outlined.Speed
+import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -76,10 +80,18 @@ object ShellUiState {
 
     /** Dialog "Lizenz" offen. */
     val licenseOpen = MutableStateFlow(false)
+
+    /** Rechte Leiste (Fahrpult) eingeblendet; anfangs aus, die Wahl bleibt gespeichert. */
+    val panelOpen = MutableStateFlow(false)
 }
 
 /** true, wenn die rechte Leiste (z. B. Fahrpult) sichtbar ist. Module zeigen ihre Inhalte sonst selbst an. */
 val LocalWideLayout = compositionLocalOf { false }
+
+/** Ist die rechte Leiste (Fahrpult) gerade zu sehen? Sonst zeigt z. B. "Fahren" das Fahrpult selbst. */
+val LocalPanelVisible = compositionLocalOf { false }
+
+private const val PREF_PANEL = "shell.fahrpult"
 
 /** Ab dieser Breite: Seitenleiste links, Fahrpult rechts (Tablet quer, PC). Darunter: Leiste unten (Handy). */
 private val WIDE_LAYOUT = 900.dp
@@ -112,6 +124,11 @@ fun MobaShell(
     val visible = screens.filter { active(it.moduleId) }
     val activePanels = panels.filter { active(it.moduleId) }
     val activeDocks = docks.filter { active(it.moduleId) }
+    LaunchedEffect(app) {
+        ShellUiState.panelOpen.value = app.preference(PREF_PANEL) == "an"
+        ShellUiState.panelOpen.drop(1).collect { app.setPreference(PREF_PANEL, if (it) "an" else "aus") }
+    }
+    val panelOpen by ShellUiState.panelOpen.collectAsState()
     var current by remember { mutableStateOf(initialScreen ?: OVERVIEW) }
     if (current != OVERVIEW && visible.none { it.moduleId == current }) current = OVERVIEW
 
@@ -119,11 +136,17 @@ fun MobaShell(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wide = maxWidth >= WIDE_LAYOUT
-                CompositionLocalProvider(LocalWideLayout provides wide, LocalImagePicker provides imagePicker) {
+                val showPanel = wide && panelOpen && activePanels.isNotEmpty()
+                CompositionLocalProvider(
+                    LocalWideLayout provides wide,
+                    LocalImagePicker provides imagePicker,
+                    LocalPanelVisible provides showPanel,
+                ) {
                 Column(Modifier.fillMaxSize()) {
                     TopBar(
                         app,
                         compact = !wide,
+                        panelToggle = wide && activePanels.isNotEmpty(),
                         destinations = listOf(Destination(OVERVIEW, "Übersicht", Icons.Outlined.Dashboard)) +
                             visible.map { Destination(it.moduleId, it.title, it.icon) },
                         current = current,
@@ -166,7 +189,7 @@ fun MobaShell(
                                 if (screen == null) Overview(app, modules, wide) else screen.Content(app)
                             }
                         }
-                        if (wide && activePanels.isNotEmpty()) {
+                        if (showPanel) {
                             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             Surface(
                                 Modifier.width(380.dp).fillMaxHeight(),
@@ -226,6 +249,7 @@ private class Destination(val id: String, val title: String, val icon: ImageVect
 private fun TopBar(
     app: MobaApp,
     compact: Boolean,
+    panelToggle: Boolean,
     destinations: List<Destination>,
     current: String,
     onNavigate: (String) -> Unit,
@@ -274,6 +298,17 @@ private fun TopBar(
                 if (!compact) {
                     Spacer(Modifier.width(6.dp))
                     Text(if (trackPower) "Gleis an" else "Gleis aus")
+                }
+            }
+
+            // Fahrpult rechts ein- und ausblenden
+            if (panelToggle) {
+                val open by ShellUiState.panelOpen.collectAsState()
+                FilledTonalIconToggleButton(
+                    checked = open,
+                    onCheckedChange = { ShellUiState.panelOpen.value = it },
+                ) {
+                    Icon(Icons.Outlined.Speed, if (open) "Fahrpult ausblenden" else "Fahrpult einblenden")
                 }
             }
 
