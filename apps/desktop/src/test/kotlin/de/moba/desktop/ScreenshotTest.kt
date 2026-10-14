@@ -15,6 +15,23 @@ import de.moba.core.runtime.LicenseSigner
 import de.moba.core.station.Direction
 import de.moba.core.station.StationConfig
 import de.moba.core.station.StationDriver
+import de.moba.modules.calibration.CalibrationModule
+import de.moba.modules.calibration.CalibrationRepository
+import de.moba.modules.calibration.api.CalibrationService
+import de.moba.modules.calibration.api.CalibrationSetup
+import de.moba.modules.calibration.api.CalibrationStore
+import de.moba.modules.calibration.api.Contact
+import de.moba.modules.calibration.api.MeasuringTrack
+import de.moba.modules.calibration.api.Scale
+import de.moba.modules.calibration.api.SpeedPoint
+import de.moba.modules.calibration.api.SpeedProfile
+import de.moba.modules.calibration.api.SpeedStepMode
+import de.moba.modules.calibration.ui.CalibrationScreen
+import de.moba.modules.calibration.ui.CalibrationUiState
+import de.moba.modules.throttles.ThrottleBarModule
+import de.moba.modules.throttles.ThrottleBarRepository
+import de.moba.modules.throttles.api.ThrottleBarStore
+import de.moba.modules.throttles.ui.ThrottleDock
 import de.moba.modules.decoder.DecoderModule
 import de.moba.modules.decoder.DecoderRepository
 import de.moba.modules.decoder.api.DecoderProfile
@@ -138,14 +155,40 @@ class ScreenshotTest {
             override fun load() = listOf(DemoPlans.layout(), DemoPlans.stagingYard(), DemoPlans.industry())
             override fun save(plans: List<TrackPlan>) = Unit
         }
+        val proThrottles = object : ThrottleBarStore {
+            var saved = listOf(3, 12, 5)
+            override fun load() = saved
+            override fun save(addresses: List<Int>) {
+                saved = addresses
+            }
+        }
+        val proCalibration = object : CalibrationStore {
+            var saved = listOf(
+                SpeedProfile(
+                    3, "BR 218", SpeedStepMode.STEPS_28, Scale.H0,
+                    (1..28).map { SpeedPoint(it, if (it < 2) null else 4.0 + it * 5.2 - it * it * 0.04) }, "2026-10-14",
+                ),
+            )
+            override fun load() = saved
+            override fun save(profiles: List<SpeedProfile>) {
+                saved = profiles
+            }
+        }
         val pro = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator),
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)), DecoderModule(DecoderRepository(null)), SymbolModule(SymbolRepository(null))) },
+            moduleFactory = {
+                listOf(
+                    DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)),
+                    DecoderModule(DecoderRepository(null)), SymbolModule(SymbolRepository(null)),
+                    ThrottleBarModule(ThrottleBarRepository(proThrottles)), CalibrationModule(CalibrationRepository(proCalibration)),
+                )
+            },
             license = LicenseInfo.of("pro", "decoder"),
         )
         pro.connect(StationConfig("simulator")).join()
         val proSim = pro.session.value!!.station as SimulatorStation
+        pro.layout.update { it.copy(locos = app.layout.layout.value.locos) }
         proSim.setTrackPower(true)
         pro.session.value!!.host.service(TrackPlanService::class)!!.apply {
             toggleVisible("schattenbahnhof")
@@ -372,6 +415,38 @@ class ScreenshotTest {
         }
         TrackPlanUiState.selected.value = null
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+
+        // Mehrere Fahrregler am unteren Rand und Einmessen (beides ab Pro)
+        val proDriving = pro.session.value!!.host.service(DrivingService::class)!!
+        proDriving.drive(3, 64, Direction.FORWARD)
+        proDriving.setFunction(3, 0, on = true)
+        proDriving.drive(12, 30, Direction.REVERSE)
+        delay(200)
+        val withCalibration = withSymbols + CalibrationScreen
+        app.setDarkTheme(true)
+        render("pc-fahrregler-pro-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withCalibration, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, docks = listOf(ThrottleDock))
+        }
+        app.setDarkTheme(false)
+        render("handy-fahrregler-pro-hell", 824, 1780, 2f) {
+            MobaShell(pro, withCalibration, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, docks = listOf(ThrottleDock))
+        }
+        render("pc-einmessen-pro-hell", 1440, 900, 1f) {
+            MobaShell(pro, withCalibration, listOf(DrivingPanel), initialScreen = CalibrationScreen.moduleId)
+        }
+        CalibrationUiState.address.value = "5"
+        pro.session.value!!.host.service(CalibrationService::class)!!.start(
+            CalibrationSetup(5, "V 100", SpeedStepMode.STEPS_128, MeasuringTrack(Contact(1, 1), Contact(1, 2), 1000)),
+        )
+        delay(200)
+        app.setDarkTheme(true)
+        render("pc-einmessen-laeuft-pro-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withCalibration, listOf(DrivingPanel), initialScreen = CalibrationScreen.moduleId)
+        }
+        render("handy-einmessen-pro-dunkel", 824, 1780, 2f) {
+            MobaShell(pro, withCalibration, listOf(DrivingPanel), initialScreen = CalibrationScreen.moduleId)
+        }
+        pro.session.value!!.host.service(CalibrationService::class)!!.cancel()
 
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)

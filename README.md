@@ -27,6 +27,8 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und 
 | `modules/decoder` | Modul "Decoder": CV-Programmierung und Decoder-Datenbank |
 | `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
 | `modules/symbols` | Modul "Symbole": Pixel-Editor fuer eigene Symbole, Licht- und Formsignale (DE, CH, NL) |
+| `modules/throttles` | Modul "Mehrere Fahrregler": Leiste mit bis zu sechs Fahrreglern am unteren Rand (ab Pro) |
+| `modules/calibration` | Modul "Loks einmessen": Geschwindigkeit je Fahrstufe (14, 28, 128) ueber eine Messstrecke (ab Pro) |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
 | `tools/sandbox` | Startet Kern, Simulator und Beispielmodule auf der Konsole |
@@ -134,6 +136,9 @@ unter dem Signal. Meldet die Zentrale eine dieser Adressen, zeigt das Gleisbild 
 Eine Symbolkachel zeigt ein eigenes Symbol, mit Schaltadresse wechselt sie zwischen
 erstem (aus) und zweitem Zustand (an).
 Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelder leuchten orange.
+Die Gleisgroesse (8 bis 80, anfangs 24) laesst sich im Betrieb und im Editor mit Minus/Plus einstellen und bleibt
+gespeichert; "Einpassen" waehlt die Groesse, bei der das ganze Raster ins Fenster passt.
+Sind Gleisbilder beim Schliessen (Windows) oder Zurueck (Android) ungespeichert, fragt die App nach.
 
 | | Kostenlos | Basis | Pro / Club |
 |---|---|---|---|
@@ -144,6 +149,22 @@ Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelde
 Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn-steuerung`,
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
+
+## Mehrere Fahrregler
+
+Ab Pro gibt es am unteren Bildrand eine Leiste "Fahrregler". Mit "+ Fahrregler" kommt eine Lok aus der Liste
+oder per Adresse dazu, bis zu sechs gleichzeitig. Jeder Regler hat Fahrstufe, Richtung, Halt und Licht.
+Die Leiste laesst sich einklappen; die offenen Regler bleiben in `fahrregler.txt` gespeichert.
+
+## Loks einmessen
+
+Ab Pro misst der Reiter "Einmessen", wie schnell eine Lok in jeder Fahrstufe faehrt (Vorbild-km/h).
+Dazu braucht es einen Rundkurs mit zwei Rueckmeldern; die Laenge der Messstrecke wird von Anfang Startmelder
+bis Anfang Endmelder gemessen. Fuer jede Stufe faehrt die Lok an, wartet die Anlaufzeit ab und misst die Zeit
+zwischen den Meldern. 14 und 28 Fahrstufen werden komplett gemessen, bei 128 jede 4., 8. oder 16. Stufe.
+Die Zentrale faehrt intern immer mit 128 Fahrstufen; fuer 14 und 28 nimmt die App die passenden Stellen dieser Skala.
+Kommt ein Melder nicht innerhalb von 180 Sekunden, gilt die Stufe als zu langsam. Ergebnis: Kurve, Tabelle,
+Hoechstgeschwindigkeit und "ab welcher Fahrstufe faehrt die Lok X km/h". Gespeichert in `einmessen.txt`.
 
 ## Symbole
 

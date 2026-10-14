@@ -30,6 +30,10 @@ import de.moba.modules.vehicles.VehicleRepository
 import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.core.runtime.EcLicenseVerifier
 import de.moba.core.runtime.ManufacturerKey
+import de.moba.modules.calibration.CalibrationModule
+import de.moba.modules.calibration.CalibrationRepository
+import de.moba.modules.calibration.FileCalibrationStore
+import de.moba.modules.calibration.ui.CalibrationScreen
 import de.moba.modules.throttles.FileThrottleBarStore
 import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
@@ -59,6 +63,7 @@ private val vehicles = VehicleRepository(FileVehicleStore(File(dataDir, "fahrzeu
 private val symbols = SymbolRepository(FileSymbolStore(File(dataDir, "symbole.txt")))
 private val decoders = DecoderRepository(FileDecoderStore(File(dataDir, "decoder.txt")))
 private val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dataDir, "fahrregler.txt")))
+private val calibration = CalibrationRepository(FileCalibrationStore(File(dataDir, "einmessen.txt")))
 
 /** Hintergrundbild als Kopie im Datenordner, damit es auch nach Verschieben des Originals bleibt. */
 private object DesktopImageStore : ImageStore {
@@ -104,7 +109,7 @@ fun main() = application {
                 scope = scope,
                 drivers = StationCatalog.drivers,
                 discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar)) },
+                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration)) },
                 settings = DesktopSettings,
                 imageStore = DesktopImageStore,
                 licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
@@ -113,7 +118,7 @@ fun main() = application {
         val picker = remember { imagePicker(window) }
         MobaShell(
             app,
-            screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen),
+            screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen, CalibrationScreen),
             panels = listOf(DrivingPanel),
             docks = listOf(ThrottleDock),
             imagePicker = picker,
