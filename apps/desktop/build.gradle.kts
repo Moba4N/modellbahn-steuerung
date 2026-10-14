@@ -33,6 +33,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.swing)
     testImplementation(project(":adapters:simulator"))
     testImplementation(kotlin("test"))
+    testImplementation(compose.desktop.uiTestJUnit4)
 }
 
 // Der Test ScreenshotTest legt Vorschaubilder der Oberflaeche hier ab (siehe GitHub-Build).

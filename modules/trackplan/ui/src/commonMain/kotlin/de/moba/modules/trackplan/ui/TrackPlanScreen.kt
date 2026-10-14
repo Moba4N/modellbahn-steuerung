@@ -65,6 +65,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -170,6 +171,15 @@ private fun ModeChip(label: String, icon: ImageVector, selected: Boolean, onClic
 
 private fun say(text: String?) {
     TrackPlanUiState.message.value = text
+}
+
+/**
+ * Aendert das Gleisbild [planId] ausgehend von seinem aktuellen Stand im Dienst. So schreibt eine
+ * Eingabe nie eine aeltere Fassung zurueck, die eine Ansicht noch im Speicher hat.
+ */
+private fun TrackPlanService.change(planId: String, transform: (TrackPlan) -> TrackPlan) {
+    val current = plans.value.firstOrNull { it.id == planId } ?: return
+    update(transform(current))
 }
 
 // ---------------------------------------------------------------- Betrieb
@@ -362,16 +372,24 @@ private fun EditorToolbar(service: TrackPlanService, plans: List<TrackPlan>, pla
                 label = { Text(p.name) },
             )
         }
-        IconButton(onClick = {
-            val created = service.addPlan("Gleisbild ${plans.size + 1}")
+        OutlinedButton(onClick = {
+            val names = service.plans.value.map { it.name }.toSet()
+            val name = generateSequence(service.plans.value.size + 1) { it + 1 }.map { "Gleisbild $it" }.first { it !in names }
+            val created = service.addPlan(name)
             TrackPlanUiState.editPlan.value = created.id
             TrackPlanUiState.selected.value = null
-        }) { Icon(Icons.Filled.Add, "Neues Gleisbild") }
+            TrackPlanUiState.cellSize.value = null
+            say("„$name“ angelegt. Gleisform wählen und ins Raster tippen.")
+        }) {
+            Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Neues Gleisbild")
+        }
         IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.Delete, "Gleisbild löschen") }
 
         OutlinedTextField(
             value = plan.name,
-            onValueChange = { service.update(plan.copy(name = it.take(40))) },
+            onValueChange = { name -> service.change(plan.id) { it.copy(name = name.take(40)) } },
             label = { Text("Name") },
             singleLine = true,
             modifier = Modifier.width(190.dp),
@@ -433,10 +451,11 @@ private fun SizeFields(service: TrackPlanService, plan: TrackPlan) {
             IconButton(onClick = {
                 val nw = w.toIntOrNull() ?: plan.width
                 val nh = h.toIntOrNull() ?: plan.height
-                val resized = plan.resize(nw, nh)
-                service.update(resized)
-                w = resized.width.toString()
-                h = resized.height.toString()
+                service.change(plan.id) { it.resize(nw, nh) }
+                service.plans.value.firstOrNull { it.id == plan.id }?.let {
+                    w = it.width.toString()
+                    h = it.height.toString()
+                }
             }) { Icon(Icons.Filled.Check, "Größe übernehmen") }
         }
     }
@@ -529,38 +548,40 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
 /** Das Raster zum Zeichnen, scroll- und zoombar. */
 @Composable
 private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Modifier) {
-    val tool by TrackPlanUiState.tool.collectAsState()
-    val rotation by TrackPlanUiState.placeRotation.collectAsState()
     val selected by TrackPlanUiState.selected.collectAsState()
     val cellSize by TrackPlanUiState.cellSize.collectAsState()
 
     val library = LocalSymbolLibrary.current
     val editorState = TrackState(symbolImage = { symbolImage(it, emptyMap(), emptyMap(), library) })
 
-    fun tap(x: Int, y: Int) {
-        val tile = plan.tileAt(x, y)
-        when (val t = tool) {
+    val planId = plan.id
+    // Liest Werkzeug, Auswahl und Gleisbild erst beim Antippen, damit jeder Klick auf dem neuesten Stand arbeitet.
+    val tap = { x: Int, y: Int ->
+        val current = service.plans.value.firstOrNull { it.id == planId }
+        val tile = current?.tileAt(x, y)
+        when (val t = TrackPlanUiState.tool.value) {
             EditTool.Select -> TrackPlanUiState.selected.value = if (tile != null) x to y else null
             EditTool.Rotate -> if (tile != null) {
-                service.update(plan.rotate(x, y))
+                service.change(planId) { it.rotate(x, y) }
                 TrackPlanUiState.selected.value = x to y
             }
             EditTool.Erase -> {
-                service.update(plan.remove(x, y))
-                if (selected == x to y) TrackPlanUiState.selected.value = null
+                service.change(planId) { it.remove(x, y) }
+                if (TrackPlanUiState.selected.value == x to y) TrackPlanUiState.selected.value = null
             }
             is EditTool.Place -> {
                 // Gleiche Form nochmal antippen dreht sie, andere Form ersetzt die Kachel.
                 if (tile?.shape == t.shape) {
-                    service.update(plan.rotate(x, y))
+                    service.change(planId) { it.rotate(x, y) }
                 } else {
-                    val rot = if (t.shape == TrackShape.TEXT) 0 else rotation
+                    val rot = if (t.shape == TrackShape.TEXT) 0 else TrackPlanUiState.placeRotation.value
                     val symbol = when (t.shape) {
                         TrackShape.SYMBOL -> library.firstOrNull()?.id.orEmpty()
                         TrackShape.SIGNAL -> TrackPlanUiState.lastSignal.value
                         else -> ""
                     }
-                    service.update(plan.put(TrackTile(x, y, t.shape, rot, text = if (t.shape == TrackShape.TEXT) "Text" else "", symbol = symbol)))
+                    val text = if (t.shape == TrackShape.TEXT) "Text" else ""
+                    service.change(planId) { it.put(TrackTile(x, y, t.shape, rot, text = text, symbol = symbol)) }
                 }
                 TrackPlanUiState.selected.value = x to y
             }
@@ -582,7 +603,7 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())
                 .padding(12.dp),
         ) {
-            TrackPlanView(plan, cell.dp, editorState, selected = selected, showGrid = true, onTap = ::tap)
+            TrackPlanView(plan, cell.dp, editorState, Modifier.testTag(EDITOR_GRID_TAG), selected = selected, showGrid = true, onTap = tap)
         }
         Surface(
             Modifier.align(Alignment.BottomEnd).padding(10.dp),
@@ -611,7 +632,7 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
                     enabled = fitted.width != plan.width || fitted.height != plan.height,
                 ) {
                     TrackPlanUiState.cellSize.value = cell
-                    service.update(fitted)
+                    service.change(plan.id) { it.fitTo(columns, rows) }
                     say("Raster jetzt ${fitted.width} × ${fitted.height} Felder.")
                 }
             }
@@ -631,6 +652,9 @@ private fun ToolButton(label: String, icon: ImageVector, showLabel: Boolean, ena
         IconButton(enabled = enabled, onClick = onClick) { Icon(icon, label) }
     }
 }
+
+/** Kennung des Editor-Rasters fuer Oberflaechentests. */
+const val EDITOR_GRID_TAG = "gleisbild-raster"
 
 /** Kleinste und groesste Kachel im Editor in dp. */
 private const val MIN_CELL = 8
@@ -653,7 +677,7 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                 )
                 return@Column
             }
-            fun set(t: TrackTile) = service.update(plan.put(t))
+            val set = { t: TrackTile -> service.change(plan.id) { it.put(t) } }
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -712,7 +736,7 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                     )
                 }
                 FilledTonalButton(onClick = {
-                    service.update(plan.remove(tile.x, tile.y))
+                    service.change(plan.id) { it.remove(tile.x, tile.y) }
                     TrackPlanUiState.selected.value = null
                 }) {
                     Icon(Icons.Outlined.Delete, null, modifier = Modifier.size(18.dp))
