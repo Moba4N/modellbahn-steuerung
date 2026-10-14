@@ -95,6 +95,10 @@ fun MobaShell(
     panels: List<ModulePanel> = emptyList(),
     initialScreen: String? = null,
     imagePicker: ImagePicker? = null,
+    docks: List<ModuleDock> = emptyList(),
+    /** Fragt vor dem Beenden nach ungespeicherten Aenderungen; [onExit] beendet dann die App. */
+    exitGuard: ExitGuard? = null,
+    onExit: () -> Unit = {},
 ) {
     val dark by app.darkTheme.collectAsState()
     val appearance by app.appearance.collectAsState()
@@ -107,6 +111,7 @@ fun MobaShell(
     fun active(id: String) = modules[id]?.state == ModuleState.ACTIVE
     val visible = screens.filter { active(it.moduleId) }
     val activePanels = panels.filter { active(it.moduleId) }
+    val activeDocks = docks.filter { active(it.moduleId) }
     var current by remember { mutableStateOf(initialScreen ?: OVERVIEW) }
     if (current != OVERVIEW && visible.none { it.moduleId == current }) current = OVERVIEW
 
@@ -171,6 +176,10 @@ fun MobaShell(
                             }
                         }
                     }
+                    activeDocks.forEach { dock ->
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        dock.Content(app)
+                    }
                     if (!wide) {
                         // Ab sechs Eintraegen kleinere Beschriftung, damit nichts umbricht
                         val compact = visible.size + 1 > 5
@@ -199,6 +208,9 @@ fun MobaShell(
             }
             if (licenseOpen) {
                 LicenseDialog(app, onDismiss = { ShellUiState.licenseOpen.value = false })
+            }
+            if (exitGuard != null && exitGuard.asking) {
+                ExitDialog(visible.mapNotNull { it.unsavedWork(app) }, exitGuard, onExit)
             }
         }
     }

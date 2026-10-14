@@ -24,6 +24,7 @@ import de.moba.modules.trackplan.ui.EditTool
 import de.moba.modules.trackplan.ui.TrackPlanMode
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanUiState
+import de.moba.ui.shell.ExitGuard
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import kotlinx.coroutines.CoroutineScope
@@ -72,7 +73,7 @@ class TrackPlanEditorTest {
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
         TrackPlanUiState.editPlan.value = null
         TrackPlanUiState.selected.value = null
-        TrackPlanUiState.cellSize.value = null
+        TrackPlanUiState.tileSize.value = 24
         TrackPlanUiState.tool.value = EditTool.Place(TrackShape.STRAIGHT)
         TrackPlanUiState.message.value = null
     }
@@ -85,7 +86,7 @@ class TrackPlanEditorTest {
         val store = MemoryStore(listOf(start))
         val (app, service) = app(store)
         TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
-        TrackPlanUiState.cellSize.value = CELL
+        TrackPlanUiState.tileSize.value = CELL
         TrackPlanUiState.tool.value = EditTool.Erase
         setContent { MobaShell(app, listOf(TrackPlanScreen), emptyList(), initialScreen = TrackPlanScreen.moduleId) }
         val cellPx = CELL * density.density
@@ -119,8 +120,6 @@ class TrackPlanEditorTest {
         assertEquals(2, service.plans.value.size)
         val created = service.plans.value.last()
         assertEquals(created.id, TrackPlanUiState.editPlan.value)
-        TrackPlanUiState.cellSize.value = CELL
-        waitForIdle()
         grid.tapCell(0, 0, cellPx)
         waitForIdle()
         assertNotNull(service.plans.value.single { it.id == created.id }.tileAt(0, 0))
@@ -136,6 +135,41 @@ class TrackPlanEditorTest {
         assertNull(saved.tileAt(2, 1))
         assertNotNull(saved.tileAt(2, 3))
         assertNotNull(store.saved.last().tileAt(0, 0))
+    }
+
+    @Test
+    fun closingWithUnsavedPlansAsksFirst() = runComposeUiTest {
+        val store = MemoryStore(listOf(start))
+        val (app, service) = app(store)
+        val guard = ExitGuard()
+        var exited = 0
+        TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
+        setContent {
+            MobaShell(app, listOf(TrackPlanScreen), emptyList(), initialScreen = TrackPlanScreen.moduleId, exitGuard = guard, onExit = { exited++ })
+        }
+
+        // Nichts geaendert: sofort beenden
+        guard.request()
+        waitForIdle()
+        assertEquals(1, exited)
+
+        // Geaendert: erst fragen, Abbrechen beendet nicht
+        service.update(start.remove(1, 1))
+        guard.request()
+        waitForIdle()
+        onNodeWithText("Ungespeicherte Änderungen").assertExists()
+        onNodeWithText("Abbrechen").performClick()
+        waitForIdle()
+        assertEquals(1, exited)
+
+        // Speichern und beenden
+        guard.request()
+        waitForIdle()
+        onNodeWithText("Speichern und beenden").performClick()
+        waitForIdle()
+        assertEquals(2, exited)
+        assertNull(store.saved.single().tileAt(1, 1))
+        assertFalse(service.unsaved.value)
     }
 
     private companion object {

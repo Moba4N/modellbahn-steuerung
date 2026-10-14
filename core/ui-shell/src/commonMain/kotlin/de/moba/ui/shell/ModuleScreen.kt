@@ -11,6 +11,29 @@ interface ModuleScreen {
 
     @Composable
     fun Content(app: MobaApp)
+
+    /** Aenderungen dieses Reiters, die beim Beenden verloren gingen; `null` = alles gespeichert. */
+    fun unsavedWork(app: MobaApp): UnsavedWork? = null
+}
+
+/** Ungespeicherte Aenderungen, nach denen die App vor dem Beenden fragt. */
+class UnsavedWork(
+    /** Was ungespeichert ist, z. B. "Gleisbilder". */
+    val title: String,
+    /** Ob sich die Aenderungen mit der aktuellen Lizenz speichern lassen. */
+    val canSave: Boolean,
+    /** Speichert; wirft bei einem Fehler. */
+    val save: () -> Unit,
+)
+
+/**
+ * Eine Leiste am unteren Rand, z. B. mehrere Fahrregler. Sie bleibt sichtbar, egal welche Ansicht offen ist.
+ */
+interface ModuleDock {
+    val moduleId: String
+
+    @Composable
+    fun Content(app: MobaApp)
 }
 
 /**

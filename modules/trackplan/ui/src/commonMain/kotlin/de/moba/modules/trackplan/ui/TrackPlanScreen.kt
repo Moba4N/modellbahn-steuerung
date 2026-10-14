@@ -56,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,7 +85,9 @@ import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.ModuleScreen
 import de.moba.ui.shell.StatusPill
+import de.moba.ui.shell.UnsavedWork
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 enum class TrackPlanMode { BETRIEB, BEARBEITEN }
@@ -106,8 +109,8 @@ object TrackPlanUiState {
     /** Drehung neu gesetzter Gleise in 45-Grad-Schritten; 2 = waagerecht. */
     val placeRotation = MutableStateFlow(2)
     val selected = MutableStateFlow<Pair<Int, Int>?>(null)
-    /** Kachelgroesse im Editor in dp; `null` = so gross, dass das ganze Raster ins Fenster passt. */
-    val cellSize = MutableStateFlow<Int?>(null)
+    /** Groesse eines Gleissymbols in dp, im Betrieb und im Editor; bleibt ueber Neustarts erhalten. */
+    val tileSize = MutableStateFlow(DEFAULT_TILE)
     val message = MutableStateFlow<String?>(null)
 
     /** Signalbild fuer neu gesetzte Signale: das zuletzt gewaehlte, anfangs das H/V-Lichthauptsignal. */
@@ -120,8 +123,19 @@ object TrackPlanScreen : ModuleScreen {
     override val title = "Gleisbild"
     override val icon = Icons.Outlined.AltRoute
 
+    override fun unsavedWork(app: MobaApp): UnsavedWork? {
+        val service = app.session.value?.host?.service(TrackPlanService::class) ?: return null
+        if (!service.unsaved.value) return null
+        return UnsavedWork("Gleisbilder", service.canSave) { service.save() }
+    }
+
     @Composable
     override fun Content(app: MobaApp) {
+        // Gleisgroesse aus den Einstellungen holen und jede Aenderung dort ablegen
+        LaunchedEffect(app) {
+            app.preference(PREF_TILE_SIZE)?.toIntOrNull()?.let { TrackPlanUiState.tileSize.value = it.coerceIn(MIN_CELL, MAX_CELL) }
+            TrackPlanUiState.tileSize.drop(1).collect { app.setPreference(PREF_TILE_SIZE, it.toString()) }
+        }
         val session by app.session.collectAsState()
         val service = session?.host?.service(TrackPlanService::class) ?: return
         val symbolService = session?.host?.service(SymbolService::class)
@@ -140,6 +154,7 @@ object TrackPlanScreen : ModuleScreen {
                         TrackPlanUiState.message.value = null
                     }
                     Spacer(Modifier.width(8.dp))
+                    if (mode == TrackPlanMode.BETRIEB) TileSizeControl()
                     message?.let {
                         Text(
                             it,
@@ -301,12 +316,12 @@ private fun PlanCard(
                 Spacer(Modifier.width(8.dp))
                 Text(plan.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             }
-            BoxWithConstraints(
-                (if (fill) Modifier.weight(1f) else Modifier).fillMaxWidth().padding(top = 8.dp),
-                contentAlignment = Alignment.Center,
+            val tileSize by TrackPlanUiState.tileSize.collectAsState()
+            val cell = tileSize.dp
+            Box(
+                (if (fill) Modifier.weight(1f).verticalScroll(rememberScrollState()) else Modifier).fillMaxWidth().padding(top = 8.dp),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                val byWidth = maxWidth / plan.width
-                val cell = (if (fill) minOf(byWidth, maxHeight / plan.height) else byWidth).coerceIn(10.dp, 44.dp)
                 Box(Modifier.horizontalScroll(rememberScrollState())) {
                     TrackPlanView(plan, cell, state, onTap = { x, y -> onTap(plan, x, y) })
                     menu(plan)?.let { m ->
@@ -378,7 +393,6 @@ private fun EditorToolbar(service: TrackPlanService, plans: List<TrackPlan>, pla
             val created = service.addPlan(name)
             TrackPlanUiState.editPlan.value = created.id
             TrackPlanUiState.selected.value = null
-            TrackPlanUiState.cellSize.value = null
             say("„$name“ angelegt. Gleisform wählen und ins Raster tippen.")
         }) {
             Icon(Icons.Filled.Add, null, modifier = Modifier.size(18.dp))
@@ -549,7 +563,7 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
 @Composable
 private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Modifier) {
     val selected by TrackPlanUiState.selected.collectAsState()
-    val cellSize by TrackPlanUiState.cellSize.collectAsState()
+    val tileSize by TrackPlanUiState.tileSize.collectAsState()
 
     val library = LocalSymbolLibrary.current
     val editorState = TrackState(symbolImage = { symbolImage(it, emptyMap(), emptyMap(), library) })
@@ -596,7 +610,7 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
         val areaWidth = (maxWidth - 24.dp).value
         val areaHeight = (maxHeight - 24.dp).value
         val fitCell = minOf(areaWidth / plan.width, areaHeight / plan.height).toInt().coerceIn(MIN_CELL, MAX_CELL)
-        val cell = cellSize ?: fitCell
+        val cell = tileSize
         // Auf schmalen Bildschirmen nur Symbole, sonst passt die Leiste nicht
         val labels = maxWidth >= 560.dp
         Box(
@@ -611,15 +625,9 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
             shape = MaterialTheme.shapes.small,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { TrackPlanUiState.cellSize.value = (cell - 4).coerceAtLeast(MIN_CELL) }) {
-                    Icon(Icons.Filled.ZoomOut, "Verkleinern")
-                }
-                Text("${cell * 100 / 32} %", style = MaterialTheme.typography.labelMedium)
-                IconButton(onClick = { TrackPlanUiState.cellSize.value = (cell + 4).coerceAtMost(MAX_CELL) }) {
-                    Icon(Icons.Filled.ZoomIn, "Vergrößern")
-                }
-                ToolButton("Einpassen", Icons.Filled.FitScreen, labels, enabled = cellSize != null) {
-                    TrackPlanUiState.cellSize.value = null
+                TileSizeControl()
+                ToolButton("Einpassen", Icons.Filled.FitScreen, labels, enabled = fitCell != cell) {
+                    TrackPlanUiState.tileSize.value = fitCell
                 }
                 // Raster so gross machen, dass es bei dieser Zoomstufe genau das Fenster fuellt
                 val columns = (areaWidth / cell).toInt()
@@ -631,7 +639,6 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
                     labels,
                     enabled = fitted.width != plan.width || fitted.height != plan.height,
                 ) {
-                    TrackPlanUiState.cellSize.value = cell
                     service.change(plan.id) { it.fitTo(columns, rows) }
                     say("Raster jetzt ${fitted.width} × ${fitted.height} Felder.")
                 }
@@ -656,9 +663,27 @@ private fun ToolButton(label: String, icon: ImageVector, showLabel: Boolean, ena
 /** Kennung des Editor-Rasters fuer Oberflaechentests. */
 const val EDITOR_GRID_TAG = "gleisbild-raster"
 
-/** Kleinste und groesste Kachel im Editor in dp. */
-private const val MIN_CELL = 8
-private const val MAX_CELL = 80
+/** Kleinste und groesste Gleisgroesse in dp; anfangs 24 dp. */
+internal const val MIN_CELL = 8
+internal const val MAX_CELL = 80
+internal const val DEFAULT_TILE = 24
+private const val TILE_STEP = 2
+private const val PREF_TILE_SIZE = "gleisbild.gleisgroesse"
+
+/** Gleisgroesse kleiner/groesser, gilt fuer Betrieb und Editor. */
+@Composable
+private fun TileSizeControl() {
+    val size by TrackPlanUiState.tileSize.collectAsState()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(enabled = size > MIN_CELL, onClick = { TrackPlanUiState.tileSize.value = (size - TILE_STEP).coerceAtLeast(MIN_CELL) }) {
+            Icon(Icons.Filled.ZoomOut, "Gleise kleiner")
+        }
+        Text("Gleisgröße $size", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        IconButton(enabled = size < MAX_CELL, onClick = { TrackPlanUiState.tileSize.value = (size + TILE_STEP).coerceAtMost(MAX_CELL) }) {
+            Icon(Icons.Filled.ZoomIn, "Gleise größer")
+        }
+    }
+}
 
 /** Eigenschaften der ausgewaehlten Kachel: Adresse, s88-Kontakt, Text, Drehung. */
 @OptIn(ExperimentalLayoutApi::class)

@@ -30,6 +30,7 @@ import de.moba.modules.vehicles.VehicleRepository
 import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.core.runtime.EcLicenseVerifier
 import de.moba.core.runtime.ManufacturerKey
+import de.moba.ui.shell.ExitGuard
 import de.moba.ui.shell.ImagePicker
 import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
@@ -84,8 +85,10 @@ private val appIcon = BitmapPainter(
 )
 
 fun main() = application {
+    // Schliessen fragt nach, wenn noch Gleisbilder ungespeichert sind.
+    val exitGuard = remember { ExitGuard() }
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = exitGuard::request,
         title = "Modellbahn-Steuerung",
         icon = appIcon,
         state = rememberWindowState(width = 1360.dp, height = 860.dp),
@@ -108,6 +111,8 @@ fun main() = application {
             screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen),
             panels = listOf(DrivingPanel),
             imagePicker = picker,
+            exitGuard = exitGuard,
+            onExit = ::exitApplication,
         )
     }
 }

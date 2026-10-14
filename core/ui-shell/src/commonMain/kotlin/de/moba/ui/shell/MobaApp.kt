@@ -94,6 +94,11 @@ class MobaApp(
         settings.set(KEY_THEME, if (dark) "dark" else "light")
     }
 
+    /** Ansichtseinstellung eines Moduls lesen, z. B. die Gleisgroesse im Gleisbild. Bleibt ueber Neustarts erhalten. */
+    fun preference(key: String): String? = settings.get(KEY_PREFERENCE + key)?.takeIf { it.isNotEmpty() }
+
+    fun setPreference(key: String, value: String) = settings.set(KEY_PREFERENCE + key, value)
+
     private val _activeLicense = MutableStateFlow(
         settings.get(KEY_LICENSE)?.let { key -> (licenseVerifier?.check(key, today()) as? LicenseCheck.Valid)?.license },
     )
@@ -304,6 +309,7 @@ class MobaApp(
         const val KEY_FONT = "ui.font"
         const val KEY_TEXT_SIZE = "ui.textSize"
         const val KEY_WATERMARK = "ui.watermark"
+        const val KEY_PREFERENCE = "pref."
         const val LOG_SIZE = 30
     }
 }

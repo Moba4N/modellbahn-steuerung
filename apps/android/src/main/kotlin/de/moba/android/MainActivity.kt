@@ -3,6 +3,7 @@ package de.moba.android
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +14,7 @@ import de.moba.modules.driving.ui.DrivingScreen
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.symbols.ui.SymbolsScreen
 import de.moba.modules.vehicles.ui.VehiclesScreen
+import de.moba.ui.shell.ExitGuard
 import de.moba.ui.shell.ImagePicker
 import de.moba.ui.shell.MobaShell
 
@@ -38,11 +40,16 @@ class MainActivity : ComponentActivity() {
                     launcher.launch("image/*")
                 }
             }
+            // Zurueck auf der Startebene fragt nach, wenn noch Gleisbilder ungespeichert sind.
+            val exitGuard = remember { ExitGuard() }
+            BackHandler { exitGuard.request() }
             MobaShell(
                 app,
                 screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen),
                 panels = listOf(DrivingPanel),
                 imagePicker = picker,
+                exitGuard = exitGuard,
+                onExit = ::finish,
             )
         }
     }
