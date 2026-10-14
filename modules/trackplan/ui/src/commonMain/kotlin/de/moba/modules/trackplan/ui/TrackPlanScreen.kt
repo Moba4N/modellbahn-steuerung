@@ -130,6 +130,7 @@ object TrackPlanScreen : ModuleScreen {
     }
 
     @Composable
+    @OptIn(ExperimentalLayoutApi::class)
     override fun Content(app: MobaApp) {
         // Gleisgroesse aus den Einstellungen holen und jede Aenderung dort ablegen
         LaunchedEffect(app) {
@@ -144,7 +145,8 @@ object TrackPlanScreen : ModuleScreen {
         val message by TrackPlanUiState.message.collectAsState()
         CompositionLocalProvider(LocalSymbolLibrary provides library) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // FlowRow: auf dem Handy rutscht die Gleisgroesse in die naechste Zeile statt abgeschnitten zu werden
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeChip("Betrieb", Icons.Filled.PlayArrow, mode == TrackPlanMode.BETRIEB) {
                         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
                         TrackPlanUiState.message.value = null
@@ -153,7 +155,6 @@ object TrackPlanScreen : ModuleScreen {
                         TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
                         TrackPlanUiState.message.value = null
                     }
-                    Spacer(Modifier.width(8.dp))
                     if (mode == TrackPlanMode.BETRIEB) TileSizeControl()
                     message?.let {
                         Text(

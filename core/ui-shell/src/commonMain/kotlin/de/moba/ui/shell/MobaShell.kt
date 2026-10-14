@@ -183,12 +183,15 @@ fun MobaShell(
                     if (!wide) {
                         // Ab sechs Eintraegen kleinere Beschriftung, damit nichts umbricht
                         val compact = visible.size + 1 > 5
+                        // Ab sieben Eintraegen nur noch beim gewaehlten Reiter beschriften, sonst wird alles abgekuerzt
+                        val crowded = visible.size + 1 > 6
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                             NavigationBarItem(
                                 selected = current == OVERVIEW,
                                 onClick = { current = OVERVIEW },
                                 icon = { Icon(Icons.Outlined.Dashboard, null) },
                                 label = { NavLabel("Übersicht", compact) },
+                                alwaysShowLabel = !crowded,
                             )
                             visible.forEach { screen ->
                                 NavigationBarItem(
@@ -196,6 +199,7 @@ fun MobaShell(
                                     onClick = { current = screen.moduleId },
                                     icon = { Icon(screen.icon, null) },
                                     label = { NavLabel(screen.title, compact) },
+                                    alwaysShowLabel = !crowded,
                                 )
                             }
                         }

@@ -161,7 +161,7 @@ private fun AddThrottleButton(bar: ThrottleBarService, locos: List<Pair<Int, Str
         address = ""
     }
     Box {
-        FilledTonalButton(onClick = { menu = true }, enabled = enabled, modifier = Modifier.height(32.dp)) {
+        FilledTonalButton(onClick = { menu = true }, enabled = enabled, modifier = Modifier.height(40.dp)) {
             Icon(Icons.Filled.Add, null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(4.dp))
             Text("Fahrregler", style = MaterialTheme.typography.labelLarge)
