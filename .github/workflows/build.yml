@@ -20,6 +20,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Bauen und testen (Kern, Simulator, Android, Desktop)
         run: ./gradlew build
+      - name: Android-App (APK zum Installieren, mit Debug-Schluessel signiert)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/android/build/outputs/apk/debug/*.apk
       - name: Sandbox ausfuehren
         run: ./gradlew :tools:sandbox:run
       - name: Vorschaubilder hochladen
