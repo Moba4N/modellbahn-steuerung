@@ -35,9 +35,11 @@ import de.moba.modules.calibration.CalibrationRepository
 import de.moba.modules.calibration.FileCalibrationStore
 import de.moba.modules.calibration.ui.CalibrationScreen
 import de.moba.modules.routes.FileRouteStore
+import de.moba.modules.monitor.MonitorModule
 import de.moba.modules.routes.RouteModule
 import de.moba.modules.routes.RouteRepository
 import de.moba.modules.routes.ui.RoutesScreen
+import de.moba.modules.monitor.ui.MonitorTool
 import de.moba.modules.throttles.FileThrottleBarStore
 import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
@@ -114,7 +116,7 @@ fun main() = application {
                 scope = scope,
                 drivers = StationCatalog.drivers,
                 discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes)) },
+                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes), MonitorModule()) },
                 settings = DesktopSettings,
                 imageStore = DesktopImageStore,
                 licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
@@ -126,6 +128,7 @@ fun main() = application {
             screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen, CalibrationScreen, RoutesScreen),
             panels = listOf(DrivingPanel),
             docks = listOf(ThrottleDock),
+            tools = listOf(MonitorTool),
             imagePicker = picker,
             exitGuard = exitGuard,
             onExit = ::exitApplication,

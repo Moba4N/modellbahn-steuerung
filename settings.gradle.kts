@@ -44,6 +44,8 @@ include(
     ":modules:calibration:impl",
     ":modules:routes:api",
     ":modules:routes:impl",
+    ":modules:monitor:api",
+    ":modules:monitor:impl",
     ":tools:sandbox",
     ":tools:license",
 )
@@ -61,6 +63,7 @@ if (providers.gradleProperty("moba.apps").getOrElse("true").toBoolean()) {
         ":modules:throttles:ui",
         ":modules:calibration:ui",
         ":modules:routes:ui",
+        ":modules:monitor:ui",
         ":apps:desktop",
         ":apps:android",
     )

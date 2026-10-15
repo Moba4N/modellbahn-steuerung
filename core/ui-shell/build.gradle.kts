@@ -16,6 +16,8 @@ kotlin {
     }
 
     sourceSets {
+        // Mitgelieferte Schriften (SIL Open Font License, siehe schrift-lizenzen)
+        val desktopMain by getting { resources.srcDir("fonts") }
         commonMain.dependencies {
             api(project(":core:runtime"))
             implementation(libs.kotlinx.datetime)
@@ -33,6 +35,7 @@ android {
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
+    sourceSets["main"].res.srcDir("fonts")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

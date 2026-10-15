@@ -57,6 +57,9 @@ import de.moba.core.station.LocoState
 import de.moba.modules.driving.api.DrivingService
 import de.moba.modules.throttles.api.THROTTLES_MODULE_ID
 import de.moba.modules.throttles.api.ThrottleBarService
+import de.moba.ui.shell.FunctionKeys
+import de.moba.ui.shell.FunctionKeysState
+import de.moba.ui.shell.FunctionRangeChooser
 import de.moba.ui.shell.LocalWideLayout
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.ModuleDock
@@ -133,6 +136,7 @@ object ThrottleDock : ModuleDock {
                         ) {
                             open.forEach { address ->
                                 MiniThrottle(
+                                    app = app,
                                     name = nameOf(address),
                                     state = locos[address] ?: LocoState(address),
                                     service = driving,
@@ -186,9 +190,29 @@ private fun AddThrottleButton(bar: ThrottleBarService, locos: List<Pair<Int, Str
     }
 }
 
-/** Kleiner Fahrregler: Name, Regler, Richtung, Halt und Licht. */
+/** Taste "F": klappt alle Funktionstasten der Lok auf (bis F31, je nach Einstellung). */
 @Composable
-private fun MiniThrottle(name: String, state: LocoState, service: DrivingService, width: Int, onClose: () -> Unit) {
+private fun FunctionsButton(app: MobaApp, state: LocoState, onToggle: (Int) -> Unit) {
+    var open by remember(state.address) { mutableStateOf(false) }
+    val range = FunctionKeysState.range(app)
+    val active = state.functions.count { it in 1..range.last }
+    Box {
+        FilledIconToggleButton(checked = open, onCheckedChange = { open = it }, modifier = Modifier.size(36.dp)) {
+            Text(if (active > 0) "F·$active" else "F", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Column(Modifier.width(300.dp).padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Funktionen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                FunctionRangeChooser(app, range)
+                FunctionKeys(range, state.functions, compact = true, onToggle = onToggle)
+            }
+        }
+    }
+}
+
+/** Kleiner Fahrregler: Name, Regler, Richtung, Halt, Licht und Funktionen. */
+@Composable
+private fun MiniThrottle(app: MobaApp, name: String, state: LocoState, service: DrivingService, width: Int, onClose: () -> Unit) {
     val address = state.address
     val scope = rememberCoroutineScope()
     var dragging by remember(address) { mutableStateOf<Float?>(null) }
@@ -262,6 +286,7 @@ private fun MiniThrottle(name: String, state: LocoState, service: DrivingService
                     onCheckedChange = { run { service.setFunction(address, 0, !light) } },
                     modifier = Modifier.size(36.dp),
                 ) { Icon(Icons.Filled.Lightbulb, "Licht", modifier = Modifier.size(18.dp)) }
+                FunctionsButton(app, state) { f -> run { service.setFunction(address, f, f !in state.functions) } }
             }
         }
     }

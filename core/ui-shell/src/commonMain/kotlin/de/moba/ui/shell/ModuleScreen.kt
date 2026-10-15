@@ -46,3 +46,16 @@ interface ModulePanel {
     @Composable
     fun Content(app: MobaApp)
 }
+
+/**
+ * Ein Werkzeug, das nur ueber das Burger-Menue geoeffnet wird (z. B. der Monitor).
+ * Es erscheint als grosses Fenster ueber der App, nicht als Reiter.
+ */
+interface ModuleTool {
+    val moduleId: String
+    val title: String
+    val icon: ImageVector
+
+    @Composable
+    fun Content(app: MobaApp, onClose: () -> Unit)
+}

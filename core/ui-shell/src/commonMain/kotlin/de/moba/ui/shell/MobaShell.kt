@@ -1,5 +1,7 @@
 package de.moba.ui.shell
 
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.ui.layout.ContentScale
@@ -83,6 +85,9 @@ object ShellUiState {
 
     /** Rechte Leiste (Fahrpult) eingeblendet; anfangs aus, die Wahl bleibt gespeichert. */
     val panelOpen = MutableStateFlow(false)
+
+    /** Modul-Id des offenen Werkzeugs aus dem Burger-Menue, z. B. Monitor; `null` = keins. */
+    val openTool = MutableStateFlow<String?>(null)
 }
 
 /** true, wenn die rechte Leiste (z. B. Fahrpult) sichtbar ist. Module zeigen ihre Inhalte sonst selbst an. */
@@ -108,6 +113,8 @@ fun MobaShell(
     initialScreen: String? = null,
     imagePicker: ImagePicker? = null,
     docks: List<ModuleDock> = emptyList(),
+    /** Werkzeuge, die nur ueber das Burger-Menue erreichbar sind (z. B. Monitor). */
+    tools: List<ModuleTool> = emptyList(),
     /** Fragt vor dem Beenden nach ungespeicherten Aenderungen; [onExit] beendet dann die App. */
     exitGuard: ExitGuard? = null,
     onExit: () -> Unit = {},
@@ -124,6 +131,8 @@ fun MobaShell(
     val visible = screens.filter { active(it.moduleId) }
     val activePanels = panels.filter { active(it.moduleId) }
     val activeDocks = docks.filter { active(it.moduleId) }
+    val activeTools = tools.filter { active(it.moduleId) }
+    val openTool by ShellUiState.openTool.collectAsState()
     LaunchedEffect(app) {
         ShellUiState.panelOpen.value = app.preference(PREF_PANEL) == "an"
         ShellUiState.panelOpen.drop(1).collect { app.setPreference(PREF_PANEL, if (it) "an" else "aus") }
@@ -149,6 +158,7 @@ fun MobaShell(
                         panelToggle = wide && activePanels.isNotEmpty(),
                         destinations = listOf(Destination(OVERVIEW, "Übersicht", Icons.Outlined.Dashboard)) +
                             visible.map { Destination(it.moduleId, it.title, it.icon) },
+                        tools = activeTools.map { Destination(it.moduleId, it.title, it.icon) },
                         current = current,
                         onNavigate = { current = it },
                     )
@@ -236,6 +246,9 @@ fun MobaShell(
             if (licenseOpen) {
                 LicenseDialog(app, onDismiss = { ShellUiState.licenseOpen.value = false })
             }
+            activeTools.firstOrNull { it.moduleId == openTool }?.let { tool ->
+                ToolWindow(app, tool) { ShellUiState.openTool.value = null }
+            }
             if (exitGuard != null && exitGuard.asking) {
                 ExitDialog(visible.mapNotNull { it.unsavedWork(app) }, exitGuard, onExit)
             }
@@ -245,12 +258,27 @@ fun MobaShell(
 
 private class Destination(val id: String, val title: String, val icon: ImageVector)
 
+/** Grosses Fenster ueber der App fuer ein Werkzeug aus dem Burger-Menue. */
+@Composable
+private fun ToolWindow(app: MobaApp, tool: ModuleTool, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f),
+        ) {
+            tool.Content(app, onClose)
+        }
+    }
+}
+
 @Composable
 private fun TopBar(
     app: MobaApp,
     compact: Boolean,
     panelToggle: Boolean,
     destinations: List<Destination>,
+    tools: List<Destination>,
     current: String,
     onNavigate: (String) -> Unit,
 ) {
@@ -312,7 +340,7 @@ private fun TopBar(
                 }
             }
 
-            BurgerMenu(app, dark, destinations, current, onNavigate)
+            BurgerMenu(app, dark, destinations, tools, current, onNavigate)
 
             // Nothalt: immer sichtbar, nie lizenzpflichtig
             Button(
@@ -336,6 +364,7 @@ private fun BurgerMenu(
     app: MobaApp,
     dark: Boolean,
     destinations: List<Destination>,
+    tools: List<Destination>,
     current: String,
     onNavigate: (String) -> Unit,
 ) {
@@ -369,6 +398,25 @@ private fun BurgerMenu(
                         close()
                     },
                 )
+            }
+            if (tools.isNotEmpty()) {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                Text(
+                    "Werkzeuge",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+                tools.forEach { tool ->
+                    DropdownMenuItem(
+                        text = { Text("${tool.title} …") },
+                        leadingIcon = { Icon(tool.icon, null) },
+                        onClick = {
+                            close()
+                            ShellUiState.openTool.value = tool.id
+                        },
+                    )
+                }
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             DropdownMenuItem(

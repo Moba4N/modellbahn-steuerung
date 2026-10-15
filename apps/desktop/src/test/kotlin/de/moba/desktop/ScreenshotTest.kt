@@ -56,6 +56,11 @@ import de.moba.modules.trackplan.ui.EditTool
 import de.moba.modules.trackplan.ui.TrackPlanMode
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanUiState
+import de.moba.modules.monitor.MonitorModule
+import de.moba.modules.monitor.api.MONITOR_MODULE_ID
+import de.moba.modules.monitor.api.MonitorKind
+import de.moba.modules.monitor.ui.MonitorTool
+import de.moba.modules.monitor.ui.MonitorUiState
 import de.moba.modules.routes.RouteModule
 import de.moba.modules.routes.RouteRepository
 import de.moba.modules.routes.api.Feedback
@@ -92,7 +97,10 @@ import de.moba.modules.vehicles.api.WagonClass
 import de.moba.modules.vehicles.ui.VehicleDraft
 import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.modules.vehicles.ui.VehiclesUiState
+import de.moba.ui.shell.AccentColor
 import de.moba.ui.shell.Appearance
+import de.moba.ui.shell.FunctionKeysState
+import de.moba.ui.shell.FunctionRange
 import de.moba.ui.shell.DesignStyle
 import de.moba.ui.shell.FontChoice
 import de.moba.ui.shell.MobaApp
@@ -220,7 +228,7 @@ class ScreenshotTest {
                     DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)),
                     DecoderModule(DecoderRepository(null)), SymbolModule(SymbolRepository(null)),
                     ThrottleBarModule(ThrottleBarRepository(proThrottles)), CalibrationModule(CalibrationRepository(proCalibration)),
-                    RouteModule(proRoutes),
+                    RouteModule(proRoutes), MonitorModule(),
                 )
             },
             license = LicenseInfo.of("pro", "decoder"),
@@ -564,6 +572,65 @@ class ScreenshotTest {
         }
         app.setPreference("gleisbild.symbolgroesse", "30")
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+
+        // Monitor (nur im Burger-Menue unter "Werkzeuge"), Funktionen bis F31, Akzentfarben und Schriften
+        val tools = listOf(MonitorTool)
+        pro.setDarkTheme(true)
+        ShellUiState.menuOpen.value = true
+        render("pc-menue-werkzeuge-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId, tools = tools)
+        }
+        ShellUiState.menuOpen.value = false
+        ShellUiState.openTool.value = MONITOR_MODULE_ID
+        render("pc-monitor-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId, tools = tools)
+        }
+        MonitorUiState.kinds.value = MonitorKind.entries.toSet()
+        MonitorUiState.showHex.value = false
+        pro.setDarkTheme(false)
+        render("handy-monitor-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId, tools = tools)
+        }
+        ShellUiState.openTool.value = null
+        MonitorUiState.kinds.value = setOf(MonitorKind.SENT, MonitorKind.RECEIVED)
+        MonitorUiState.showHex.value = true
+
+        listOf(4, 17, 30).forEach { proDriving.setFunction(3, it, on = true) }
+        delay(100)
+        FunctionKeysState.set(pro, FunctionRange.F31)
+        DrivingUiState.selected.value = 3
+        pro.setPreference("shell.fahrpult", "an")
+        pro.setDarkTheme(true)
+        render("pc-fahrpult-32-funktionen-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        pro.setDarkTheme(false)
+        render("handy-fahrpult-32-funktionen-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        pro.setDarkTheme(true)
+        pro.setAppearance(Appearance(accent = AccentColor.ORANGE, font = FontChoice.OUTFIT))
+        render("pc-akzent-orange-outfit-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        pro.setAppearance(Appearance(style = DesignStyle.STELLWERK, accent = AccentColor.TEAL, font = FontChoice.TEKTUR))
+        render("pc-akzent-tuerkis-tektur-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        pro.setAppearance(Appearance(accent = AccentColor.PURPLE, font = FontChoice.LORA))
+        ShellUiState.appearanceOpen.value = true
+        render("pc-erscheinungsbild-akzent-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        pro.setDarkTheme(false)
+        render("handy-erscheinungsbild-akzent-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        ShellUiState.appearanceOpen.value = false
+        pro.setAppearance(Appearance())
+        FunctionKeysState.set(pro, FunctionRange.F12)
+        FunctionKeysState.reset()
+        DrivingUiState.selected.value = null
 
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)

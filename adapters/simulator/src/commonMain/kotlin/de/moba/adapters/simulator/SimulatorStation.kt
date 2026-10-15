@@ -6,6 +6,9 @@ import de.moba.core.station.CvProgrammer
 import de.moba.core.station.Direction
 import de.moba.core.station.LocoState
 import de.moba.core.station.StationEvent
+import de.moba.core.station.TrafficPacket
+import de.moba.core.station.TrafficSource
+import de.moba.core.station.describe
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -16,9 +19,27 @@ import kotlinx.coroutines.flow.SharedFlow
 class SimulatorStation(
     override val name: String = "Simulator",
     private val s88Modules: Int = 4,
-) : CommandStation, CvProgrammer {
-    private val _events = MutableSharedFlow<StationEvent>(extraBufferCapacity = 256)
-    override val events: SharedFlow<StationEvent> = _events
+) : CommandStation, CvProgrammer, TrafficSource {
+    private val eventFlow = MutableSharedFlow<StationEvent>(extraBufferCapacity = 256)
+    override val events: SharedFlow<StationEvent> = eventFlow
+
+    /** Meldet ein Ereignis und zeigt es dem Monitor als Antwort der Zentrale. */
+    private val _events = object {
+        suspend fun emit(event: StationEvent) {
+            eventFlow.emit(event)
+            val text = event.describe()
+            _traffic.tryEmit(TrafficPacket(outgoing = false, bytes = ByteArray(0), description = text))
+        }
+    }
+
+    private val _traffic = MutableSharedFlow<TrafficPacket>(extraBufferCapacity = 512)
+
+    /** Der Simulator hat keine Leitung; der Monitor sieht die Befehle als Klartext ohne Bytes. */
+    override val traffic: SharedFlow<TrafficPacket> = _traffic
+
+    private fun sent(text: String) {
+        _traffic.tryEmit(TrafficPacket(outgoing = true, bytes = ByteArray(0), description = text))
+    }
 
     private val locos = mutableMapOf<Int, LocoState>()
     private val turnouts = mutableMapOf<Int, Boolean>()
@@ -53,11 +74,13 @@ class SimulatorStation(
     }
 
     override suspend fun setTrackPower(on: Boolean) {
+        sent(if (on) "Gleisspannung ein" else "Gleisspannung aus")
         trackPower = on
         _events.emit(StationEvent.TrackPowerChanged(on))
     }
 
     override suspend fun emergencyStop() {
+        sent("Nothalt")
         locos.replaceAll { _, state -> state.copy(speed = 0) }
         _events.emit(StationEvent.EmergencyStopped)
         locos.values.forEach { _events.emit(StationEvent.LocoChanged(it)) }
@@ -65,12 +88,14 @@ class SimulatorStation(
 
     override suspend fun setLocoSpeed(address: Int, speed: Int, direction: Direction) {
         require(speed in 0..126) { "Fahrstufe muss zwischen 0 und 126 liegen" }
+        sent("Lok $address: Fahrstufe $speed ${if (direction == Direction.FORWARD) "vorwärts" else "rückwärts"}")
         val state = loco(address).copy(speed = speed, direction = direction)
         locos[address] = state
         _events.emit(StationEvent.LocoChanged(state))
     }
 
     override suspend fun setLocoFunction(address: Int, function: Int, on: Boolean) {
+        sent("Lok $address: F$function ${if (on) "ein" else "aus"}")
         val current = loco(address)
         val state = current.copy(functions = if (on) current.functions + function else current.functions - function)
         locos[address] = state
@@ -78,17 +103,20 @@ class SimulatorStation(
     }
 
     override suspend fun setTurnout(address: Int, thrown: Boolean) {
+        sent("Weiche $address ${if (thrown) "abzweigend" else "gerade"}")
         turnouts[address] = thrown
         _events.emit(StationEvent.TurnoutChanged(address, thrown))
     }
 
     override suspend fun readCv(cv: Int): Int {
+        sent("CV $cv lesen (Programmiergleis)")
         checkCv(cv, 0)
         if (!decoderOnProgrammingTrack) throw CvException("Der Decoder antwortet nicht (CV $cv). Steht die Lok auf dem Programmiergleis?")
         return programmingTrack[cv] ?: 0
     }
 
     override suspend fun writeCv(cv: Int, value: Int) {
+        sent("CV $cv = $value schreiben (Programmiergleis)")
         checkCv(cv, value)
         if (!decoderOnProgrammingTrack) throw CvException("Der Decoder antwortet nicht (CV $cv). Steht die Lok auf dem Programmiergleis?")
         // CV 8 = 8 setzt viele Decoder auf Werkseinstellung zurueck.
@@ -101,6 +129,7 @@ class SimulatorStation(
     }
 
     override suspend fun writeCvOnMain(address: Int, cv: Int, value: Int) {
+        sent("Lok $address: CV $cv = $value schreiben (Hauptgleis)")
         checkCv(cv, value)
         mainTrackCvs.getOrPut(address) { mutableMapOf() }[cv] = value
     }

@@ -112,9 +112,12 @@ private fun ThrottleFor(app: MobaApp, address: Int, service: DrivingService) {
     val states by service.locos.collectAsState()
     val layout by app.layout.layout.collectAsState()
     Throttle(
+        app = app,
         name = layout.locos.firstOrNull { it.address == address }?.name ?: "Lok $address",
         state = states[address] ?: LocoState(address),
         service = service,
+        // Schliessen nimmt die Lok nur aus dem Fahrpult; sie faehrt weiter, wie sie gerade faehrt.
+        onClose = { DrivingUiState.selected.value = null },
     )
 }
 
@@ -150,7 +153,8 @@ private fun LocoGrid(app: MobaApp, service: DrivingService) {
                     name = names[address] ?: "Lok $address",
                     state = states[address] ?: LocoState(address),
                     selected = selected == address,
-                    onClick = { DrivingUiState.selected.value = address },
+                    // Nochmal auf die gewaehlte Lok tippen schliesst das Fahrpult wieder
+                    onClick = { DrivingUiState.selected.value = if (selected == address) null else address },
                 )
             }
         }

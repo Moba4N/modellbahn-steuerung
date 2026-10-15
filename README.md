@@ -30,6 +30,7 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und 
 | `modules/throttles` | Modul "Mehrere Fahrregler": Leiste mit bis zu sechs Fahrreglern am unteren Rand (ab Pro) |
 | `modules/calibration` | Modul "Loks einmessen": Geschwindigkeit je Fahrstufe (14, 28, 128) ueber eine Messstrecke (ab Pro) |
 | `modules/routes` | Modul "Fahrstraßen": Fahrstrassen (stellen ab Basis), Pendelstrecken und Zugrouten (fahren ab Pro) |
+| `modules/monitor` | Modul "Monitor": Datenverkehr zur Zentrale live mitlesen (Burger-Menue, kostenlos) |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
 | `tools/sandbox` | Startet Kern, Simulator und Beispielmodule auf der Konsole |
@@ -156,6 +157,11 @@ Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechs
 
 Am PC ist das Fahrpult rechts anfangs ausgeblendet. Der Tacho-Knopf oben neben "Gleis an/aus" blendet es ein
 und aus; die Wahl bleibt gespeichert. Ohne eingeblendetes Fahrpult zeigt der Reiter "Fahren" es ueber der Lokliste.
+Das X oben im Fahrpult schliesst es wieder, ebenso ein zweiter Klick auf die gewaehlte Lok; die Lok faehrt dabei weiter.
+
+Funktionstasten: F0 bis F12, F20, F28 oder F31 (Auswahl ueber den Tasten, gilt fuer Fahrpult und alle Fahrregler).
+Die Fahrregler am unteren Rand oeffnen ihre Funktionen ueber die Taste "F". Wie viele Funktionen die Zentrale
+schalten kann, haengt vom Protokoll ab: Z21/YD7001 bis F31, XpressNet bis F28.
 
 ## Mehrere Fahrregler
 
@@ -225,9 +231,20 @@ Das Burger-Menue oben neben "Gleis an/aus" wechselt die Ansicht und oeffnet "Ers
 Dort lassen sich kostenlos einstellen:
 
 - Design: Modern, Windows 11 (Fluent-Farben, kleine Ecken) oder Stellwerk, jeweils hell oder dunkel
-- Schriftart (Standard, Serifenlos, Serifen, Schreibmaschine) und Schriftgroesse
+- Akzentfarbe fuer die ganze App (Knoepfe, Auswahl, Regler, Tacho): Farbe des Designs oder eine von zehn Farben
+- Schriftart: vier Systemschriften und acht mitgelieferte (Outfit, Work Sans, Instrument Sans, Big Shoulders,
+  Tektur, Lora, IBM Plex Serif, JetBrains Mono; SIL Open Font License, siehe `core/ui-shell/schrift-lizenzen`),
+  dazu die Schriftgroesse
 - eigenes Hintergrundbild als Wasserzeichen in drei Staerken. Das Bild wird als Kopie
   `hintergrund.bild` im Datenordner gespeichert.
+
+## Monitor
+
+Zusatzmodul, kostenlos, nur ueber das Burger-Menue unter "Werkzeuge" erreichbar. Zeigt live, was die App an die
+Zentrale sendet und was zurueckkommt: Zeit, Richtung, Klartext (z. B. "Lok 3: Fahrstufe 64 vorwärts") und die
+Rohdaten als Hex. Bei Z21/YD7001 werden die Pakete gedeutet, bei Textprotokollen (ECoS, DCC-EX) steht der Text
+selbst da. Filter fuer Gesendet, Empfangen und Meldungen, Anhalten, Leeren und Kopieren (z. B. fuer einen
+Fehlerbericht). Es bleiben die letzten 2000 Eintraege.
 
 ## Microsoft Store (MSIX)
 

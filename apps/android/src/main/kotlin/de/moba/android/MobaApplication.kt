@@ -22,6 +22,7 @@ import de.moba.modules.calibration.CalibrationModule
 import de.moba.modules.calibration.CalibrationRepository
 import de.moba.modules.calibration.FileCalibrationStore
 import de.moba.modules.routes.FileRouteStore
+import de.moba.modules.monitor.MonitorModule
 import de.moba.modules.routes.RouteModule
 import de.moba.modules.routes.RouteRepository
 import de.moba.modules.throttles.FileThrottleBarStore
@@ -50,7 +51,7 @@ class MobaApplication : Application() {
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
             drivers = StationCatalog.drivers,
             discovery = StationCatalog.discovery,
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes)) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes), MonitorModule()) },
             settings = object : SettingsStore {
                 override fun get(key: String): String? = prefs.getString(key, null)
                 override fun set(key: String, value: String) = prefs.edit().putString(key, value).apply()

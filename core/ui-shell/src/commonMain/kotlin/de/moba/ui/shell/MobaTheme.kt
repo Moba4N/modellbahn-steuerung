@@ -12,6 +12,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
@@ -290,6 +292,23 @@ private fun typography(family: FontFamily): Typography {
     )
 }
 
+/** Ersetzt die Hauptfarbe des Designs durch die gewaehlte Akzentfarbe; Flaechen und Signalfarben bleiben. */
+internal fun ColorScheme.withAccent(accent: AccentColor, dark: Boolean): ColorScheme {
+    val raw = (if (dark) accent.dark else accent.light) ?: return this
+    val a = Color(raw)
+    val onA = if (a.luminance() > 0.4f) Color(0xFF101418) else Color.White
+    val container = if (dark) lerp(a, background, 0.72f) else lerp(a, Color.White, 0.8f)
+    val onContainer = if (dark) lerp(a, Color.White, 0.75f) else lerp(a, Color.Black, 0.6f)
+    return copy(
+        primary = a,
+        onPrimary = onA,
+        primaryContainer = container,
+        onPrimaryContainer = onContainer,
+        inversePrimary = a,
+        surfaceTint = a,
+    )
+}
+
 /** Erscheinungsbild der App: standardmaessig dunkel, wie man es von Stellpult-Software kennt. */
 @Composable
 fun MobaTheme(dark: Boolean = true, appearance: Appearance = Appearance(), content: @Composable () -> Unit) {
@@ -299,7 +318,7 @@ fun MobaTheme(dark: Boolean = true, appearance: Appearance = Appearance(), conte
         LocalDensity provides Density(density.density, density.fontScale * appearance.textSize.scale),
     ) {
         MaterialTheme(
-            colorScheme = scheme(appearance.style, dark),
+            colorScheme = scheme(appearance.style, dark).withAccent(appearance.accent, dark),
             shapes = shapes(appearance.style),
             typography = typography(appearance.font.family),
             content = content,

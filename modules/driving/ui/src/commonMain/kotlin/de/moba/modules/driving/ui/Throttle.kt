@@ -10,17 +10,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledIconToggleButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -45,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import de.moba.core.station.Direction
 import de.moba.core.station.LocoState
 import de.moba.modules.driving.api.DrivingService
+import de.moba.ui.shell.FunctionKeys
+import de.moba.ui.shell.FunctionKeysState
+import de.moba.ui.shell.FunctionRangeChooser
+import de.moba.ui.shell.MobaApp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -57,7 +62,7 @@ private const val MAX_SPEED = 126
 /** Fahrpult fuer eine Lok: Tacho, Fahrregler, Richtung, Halt und Funktionstasten. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun Throttle(name: String, state: LocoState, service: DrivingService) {
+internal fun Throttle(app: MobaApp, name: String, state: LocoState, service: DrivingService, onClose: () -> Unit) {
     val address = state.address
     val scope = rememberCoroutineScope()
 
@@ -91,9 +96,14 @@ internal fun Throttle(name: String, state: LocoState, service: DrivingService) {
     val shownSpeed = dragging?.toInt() ?: state.speed
 
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("Adresse $address", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.fillMaxWidth()) {
+            Column(Modifier.align(Alignment.Center).padding(horizontal = 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text("Adresse $address", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd)) {
+                Icon(Icons.Filled.Close, "Fahrpult schließen")
+            }
         }
 
         SpeedGauge(speed = shownSpeed, direction = state.direction)
@@ -135,31 +145,17 @@ internal fun Throttle(name: String, state: LocoState, service: DrivingService) {
             ) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "Vorwärts") }
         }
 
-        Text(
-            "Funktionen",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            for (f in 0..12) {
-                val on = f in state.functions
-                FilterChip(
-                    selected = on,
-                    onClick = { run { service.setFunction(address, f, !on) } },
-                    label = { Text("F$f") },
-                    leadingIcon = if (f == 0) {
-                        { Icon(Icons.Filled.Lightbulb, "Licht", modifier = Modifier.size(16.dp)) }
-                    } else {
-                        null
-                    },
-                )
-            }
+        val range = FunctionKeysState.range(app)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Funktionen",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
         }
+        FunctionRangeChooser(app, range)
+        FunctionKeys(range, state.functions) { f -> run { service.setFunction(address, f, f !in state.functions) } }
     }
 }
 

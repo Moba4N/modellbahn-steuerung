@@ -141,6 +141,7 @@ class MobaApp(
         Appearance(
             style = enumSetting(KEY_STYLE, DesignStyle.MODERN),
             font = enumSetting(KEY_FONT, FontChoice.STANDARD),
+            accent = enumSetting(KEY_ACCENT, AccentColor.STANDARD),
             textSize = enumSetting(KEY_TEXT_SIZE, TextSize.NORMAL),
             watermark = enumSetting(KEY_WATERMARK, WatermarkStrength.MEDIUM),
         ),
@@ -151,6 +152,7 @@ class MobaApp(
         _appearance.value = appearance
         settings.set(KEY_STYLE, appearance.style.name)
         settings.set(KEY_FONT, appearance.font.name)
+        settings.set(KEY_ACCENT, appearance.accent.name)
         settings.set(KEY_TEXT_SIZE, appearance.textSize.name)
         settings.set(KEY_WATERMARK, appearance.watermark.name)
     }
@@ -307,6 +309,7 @@ class MobaApp(
         const val KEY_LICENSE = "license.key"
         const val KEY_STYLE = "ui.style"
         const val KEY_FONT = "ui.font"
+        const val KEY_ACCENT = "ui.accent"
         const val KEY_TEXT_SIZE = "ui.textSize"
         const val KEY_WATERMARK = "ui.watermark"
         const val KEY_PREFERENCE = "pref."

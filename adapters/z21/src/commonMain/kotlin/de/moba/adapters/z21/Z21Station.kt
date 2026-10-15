@@ -6,6 +6,8 @@ import de.moba.core.station.CvProgrammer
 import de.moba.core.station.Direction
 import de.moba.core.station.LocoState
 import de.moba.core.station.StationEvent
+import de.moba.core.station.TrafficPacket
+import de.moba.core.station.TrafficSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -47,9 +49,26 @@ class Z21Station(
     private val keepAliveMillis: Long = 30_000,
     private val turnoutPulseMillis: Long = 100,
     private val cvTimeoutMillis: Long = 15_000,
-) : CommandStation, CvProgrammer {
+) : CommandStation, CvProgrammer, TrafficSource {
     private val _events = MutableSharedFlow<StationEvent>(extraBufferCapacity = 256)
     override val events: SharedFlow<StationEvent> = _events
+
+    private val _traffic = MutableSharedFlow<TrafficPacket>(extraBufferCapacity = 512)
+    override val traffic: SharedFlow<TrafficPacket> = _traffic
+
+    /** Leitet alle Datagramme zusaetzlich an den Monitor weiter. */
+    private inner class Tapped(private val inner: Z21Transport) : Z21Transport {
+        override suspend fun send(packet: ByteArray) {
+            inner.send(packet)
+            if (_traffic.subscriptionCount.value > 0) _traffic.tryEmit(TrafficPacket(true, packet, Z21Describe.outgoing(packet)))
+        }
+
+        override suspend fun receive(): ByteArray = inner.receive().also { datagram ->
+            if (_traffic.subscriptionCount.value > 0) _traffic.tryEmit(TrafficPacket(false, datagram, Z21Describe.incoming(datagram)))
+        }
+
+        override fun close() = inner.close()
+    }
 
     private var transport: Z21Transport? = null
     private var scope: CoroutineScope? = null
@@ -63,7 +82,7 @@ class Z21Station(
 
     override suspend fun connect() {
         if (transport != null) return
-        val t = transportFactory()
+        val t: Z21Transport = Tapped(transportFactory())
         val s = CoroutineScope(SupervisorJob() + dispatcher)
         val firstReply = CompletableDeferred<Unit>()
         transport = t
