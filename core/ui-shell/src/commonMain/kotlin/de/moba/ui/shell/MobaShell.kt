@@ -1,5 +1,7 @@
 package de.moba.ui.shell
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.BorderStroke
@@ -205,7 +207,8 @@ fun MobaShell(
                                 Modifier.width(380.dp).fillMaxHeight(),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                             ) {
-                                Column(Modifier.padding(20.dp)) { activePanels.forEach { it.Content(app) } }
+                                // Scrollt, damit auch viele Funktionstasten (bis F31) Platz haben
+                                Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) { activePanels.forEach { it.Content(app) } }
                             }
                         }
                     }
