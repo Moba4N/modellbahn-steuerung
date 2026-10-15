@@ -87,6 +87,7 @@ object RoutesUiState {
     val tab = MutableStateFlow(RoutesTab.ROUTES)
     val selected = MutableStateFlow<String?>(null)
     val message = MutableStateFlow<String?>(null)
+    val routePick = MutableStateFlow(RoutePick())
 
     fun select(id: String?) {
         selected.value = id
@@ -352,7 +353,7 @@ private fun EditorCard(app: MobaApp, service: RouteService, tab: RoutesTab, sele
         },
     ) {
         when (tab) {
-            RoutesTab.ROUTES -> RouteEditor(book.routes.firstOrNull { it.id == id } ?: Route(id, ""), isNew, save, service)
+            RoutesTab.ROUTES -> RouteEditor(app, book.routes.firstOrNull { it.id == id } ?: Route(id, ""), isNew, save, service)
             RoutesTab.SHUTTLES -> ShuttleEditor(app, book.shuttles.firstOrNull { it.id == id } ?: Shuttle(id, "", 3), isNew, save, service)
             RoutesTab.TRAINS -> TrainRouteEditor(app, book.routes, book.trainRoutes.firstOrNull { it.id == id } ?: TrainRoute(id, "", 3), isNew, save, service)
         }
@@ -365,15 +366,26 @@ private class SettingDraft(address: String, thrown: Boolean) {
 }
 
 @Composable
-private fun RouteEditor(route: Route, isNew: Boolean, save: (() -> Unit) -> Unit, service: RouteService) {
+private fun RouteEditor(app: MobaApp, route: Route, isNew: Boolean, save: (() -> Unit) -> Unit, service: RouteService) {
     var name by remember(route.id) { mutableStateOf(route.name) }
     val settings = remember(route.id) { mutableStateListOf(*route.settings.map { SettingDraft(it.address.toString(), it.thrown) }.toTypedArray()) }
     var start by remember(route.id) { mutableStateOf(route.start?.toString() ?: "") }
     var end by remember(route.id) { mutableStateOf(route.end?.toString() ?: "") }
+    var planId by remember(route.id) { mutableStateOf(route.planId) }
+    var path by remember(route.id) { mutableStateOf(route.path) }
     val message by RoutesUiState.message.collectAsState()
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         NameField(name) { name = it }
+        RouteFromPlan(app, route) { picked ->
+            if (name.isBlank()) name = picked.name
+            settings.clear()
+            picked.settings.forEach { settings += SettingDraft(it.address.toString(), it.thrown) }
+            start = picked.start?.toString() ?: ""
+            end = picked.end?.toString() ?: ""
+            planId = picked.planId
+            path = picked.path
+        }
         Label("Weichen und Signale")
         if (settings.isEmpty()) Empty("Noch keine Weiche eingetragen.")
         settings.forEachIndexed { i, s ->
@@ -399,7 +411,7 @@ private fun RouteEditor(route: Route, isNew: Boolean, save: (() -> Unit) -> Unit
         EditorButtons(isNew, onDelete = { service.deleteRoute(route.id) }) {
             save {
                 val parsed = settings.map { RouteSetting(it.address.toIntOrNull() ?: 0, it.thrown) }
-                service.saveRoute(Route(route.id, name.trim(), parsed, parseFeedback(start, "Start"), parseFeedback(end, "Ziel")))
+                service.saveRoute(Route(route.id, name.trim(), parsed, parseFeedback(start, "Start"), parseFeedback(end, "Ziel"), planId, path))
             }
         }
     }
@@ -420,6 +432,13 @@ private fun ShuttleEditor(app: MobaApp, shuttle: Shuttle, isNew: Boolean, save: 
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         NameField(name) { name = it }
+        ShuttleFromPlan(app, shuttle.id) { picked ->
+            if (name.isBlank()) name = picked.name
+            endA = picked.endA.toString()
+            endB = picked.endB.toString()
+            brakeA = picked.brakeA?.toString() ?: ""
+            brakeB = picked.brakeB?.toString() ?: ""
+        }
         LocoPicker(app, loco) { loco = it }
         FeedbackRow {
             NumberField("Fahrstufe (0–126)", speed, Modifier.width(160.dp)) { speed = it }
@@ -492,6 +511,10 @@ private fun TrainRouteEditor(
             FilterChip(selected = repeat, onClick = { repeat = !repeat }, label = { Text("Immer wieder von vorn") })
         }
         Label("Abschnitte")
+        TrainRouteFromPlan(app, service, train.id) { ids ->
+            steps.clear()
+            ids.forEach { steps += StepDraft(it, "", "0", "") }
+        }
         if (routes.isEmpty()) Empty("Zuerst unter „Fahrstraßen“ mindestens eine Fahrstraße anlegen.")
         else if (steps.isEmpty()) Empty("Noch kein Abschnitt.")
         steps.forEachIndexed { i, step ->
@@ -618,11 +641,11 @@ private fun Label(text: String) =
     Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
 @Composable
-private fun Hint(text: String) =
+internal fun Hint(text: String) =
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 @Composable
-private fun Error(text: String) =
+internal fun Error(text: String) =
     Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
 
 private fun speedOf(text: String, default: Int) = (text.toIntOrNull() ?: default).coerceIn(0, 126)

@@ -67,9 +67,11 @@ import de.moba.modules.routes.api.RouteStore
 import de.moba.modules.routes.api.Shuttle
 import de.moba.modules.routes.api.TrainRoute
 import de.moba.modules.routes.api.TrainRouteStep
+import de.moba.modules.routes.ui.RoutePick
 import de.moba.modules.routes.ui.RoutesScreen
 import de.moba.modules.routes.ui.RoutesTab
 import de.moba.modules.routes.ui.RoutesUiState
+import de.moba.modules.trackplan.api.Cell
 import de.moba.modules.symbols.SymbolModule
 import de.moba.modules.symbols.SymbolRepository
 import de.moba.modules.symbols.api.SignalCatalog
@@ -526,6 +528,23 @@ class ScreenshotTest {
         }
         proRouteService.stopAutomation("zr-1")
         delay(100)
+
+        // Fahrstrasse im Gleisbild waehlen: Start und Ziel angetippt, Wege gefunden
+        RoutesUiState.tab.value = RoutesTab.ROUTES
+        RoutesUiState.select(RoutesUiState.NEW)
+        val pickId = proRouteService.newId("fs-")
+        RoutesUiState.routePick.value = RoutePick(pickId, open = true, planId = "beispiel", from = Cell(9, 2), to = Cell(10, 6))
+        render("pc-fahrstrasse-aus-gleisbild-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        app.setDarkTheme(false)
+        RoutesUiState.routePick.value = RoutesUiState.routePick.value.copy(choice = 1)
+        render("handy-fahrstrasse-aus-gleisbild-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        app.setDarkTheme(true)
+        RoutesUiState.routePick.value = RoutePick()
+        RoutesUiState.select(null)
 
         // Fahrpult rechts eingeblendet (anfangs aus) und groessere Symbole in der Leiste "Gleisformen"
         app.setDarkTheme(true)

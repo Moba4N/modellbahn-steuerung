@@ -188,6 +188,12 @@ Der Reiter "Fahrstraßen" hat drei Bereiche. Anlegen und Bearbeiten ist in jeder
   Fahrstrasse, sobald sie frei ist, faehrt bis zum Haltemelder (leer = Zielmelder der Fahrstrasse), haelt, loest auf
   und wartet. Mit "Immer wieder von vorn" faehrt die Route im Kreis.
 
+**Aus dem Gleisbild:** In jedem Editor oeffnet "Im Gleisbild wählen" das Gleisbild. Fuer eine Fahrstrasse Start und
+Ziel antippen: die App sucht alle befahrbaren Wege (kuerzester zuerst), zeigt sie mit gestellten Weichen an und
+uebernimmt Weichenadressen samt Stellung, ersten und letzten Rueckmelder als Start und Ziel. Fuer eine Pendelstrecke
+die beiden Endmelder antippen (Bremsmelder = die Melder direkt davor). Fuer eine Zugroute die Halte nacheinander
+antippen; jeder Abschnitt wird eine Fahrstrasse (vorhandene mit gleichem Weg werden wiederverwendet).
+
 "Stopp" haelt die Lok sofort an und gibt alle Fahrstrassen der Automatik frei. Eine Lok kann nur in einer Automatik
 gleichzeitig fahren. Gespeichert in `fahrstrassen.txt`.
 
@@ -251,4 +257,4 @@ Den privaten Schluessel gibt es nur ausserhalb des Repositorys. Lizenzen erstell
 
 - s88-Zuordnung an der YD7001 pruefen; falls noetig LocoNet-Adapter
 - Zentralen-Paket Stufe B (USB/seriell): Intellibox und Tams (P50X), Lenz LI-USB, LocoNet, Maerklin 6050
-- Phase 2: Rueckmelder-Modul; Fahrstrassen direkt im Gleisbild anklicken und Belegung anzeigen
+- Phase 2: Rueckmelder-Modul; gestellte Fahrstrassen im Stellpult hervorheben

@@ -2,6 +2,7 @@ package de.moba.modules.trackplan.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -26,7 +27,9 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import de.moba.modules.trackplan.api.Branch
+import de.moba.modules.trackplan.api.Cell
 import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackDir
 import de.moba.modules.trackplan.api.TrackPlan
@@ -270,5 +273,41 @@ internal fun DrawScope.drawTile(
             drawCircle(lamp, cell * 0.11f, head)
         }
         else -> Unit
+    }
+}
+
+/**
+ * Gleisbild zum Auswaehlen fuer andere Module (z. B. Fahrstrassen): [highlight] wird farbig unterlegt,
+ * Weichen stehen wie in [turnouts], [marks] beschriftet Zellen (z. B. "A", "B", "1"). [onTap] meldet die angetippte Zelle.
+ */
+@Composable
+fun TrackPlanPicker(
+    plan: TrackPlan,
+    cell: Dp,
+    turnouts: Map<Int, Boolean>,
+    highlight: List<Cell>,
+    marks: Map<Cell, String>,
+    modifier: Modifier = Modifier,
+    onTap: (Cell) -> Unit,
+) {
+    val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+    val markColor = MaterialTheme.colorScheme.tertiary
+    val markText = MaterialTheme.colorScheme.onTertiary
+    val measurer = rememberTextMeasurer()
+    val cellPx = with(LocalDensity.current) { cell.toPx() }
+    Box(modifier) {
+        TrackPlanView(plan, cell, TrackState(turnouts = turnouts, operating = true), onTap = { x, y -> onTap(Cell(x, y)) })
+        Canvas(Modifier.matchParentSize()) {
+            for (c in highlight.toSet()) {
+                drawRoundRect(fill, Offset(c.x * cellPx, c.y * cellPx), Size(cellPx, cellPx), CornerRadius(cellPx * 0.2f))
+            }
+            for ((c, label) in marks) {
+                val center = Offset((c.x + 0.5f) * cellPx, (c.y + 0.5f) * cellPx)
+                val r = (cellPx * 0.42f).coerceAtLeast(8f)
+                drawCircle(markColor, r, center)
+                val layout = measurer.measure(label, TextStyle(color = markText, fontSize = (r * 1.1f / density).sp, fontWeight = FontWeight.Bold))
+                drawText(layout, topLeft = center - Offset(layout.size.width / 2f, layout.size.height / 2f))
+            }
+        }
     }
 }

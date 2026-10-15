@@ -23,6 +23,9 @@ data class Route(
     val settings: List<RouteSetting> = emptyList(),
     val start: Feedback? = null,
     val end: Feedback? = null,
+    /** Gleisbild, in dem die Fahrstrasse ausgewaehlt wurde, und ihr Weg als Rasterzellen (x, y); leer = von Hand angelegt. */
+    val planId: String = "",
+    val path: List<Pair<Int, Int>> = emptyList(),
 )
 
 /**
@@ -129,7 +132,10 @@ object RouteCodec {
     fun encode(book: RouteBook): String = buildString {
         appendLine(HEADER)
         for (r in book.routes) {
-            line("FS", r.id, r.name, r.settings.joinToString(" ") { "${it.address}:${if (it.thrown) "a" else "g"}" }, fb(r.start), fb(r.end))
+            line(
+                "FS", r.id, r.name, r.settings.joinToString(" ") { "${it.address}:${if (it.thrown) "a" else "g"}" }, fb(r.start), fb(r.end),
+                r.planId, r.path.joinToString(" ") { "${it.first},${it.second}" },
+            )
         }
         for (s in book.shuttles) {
             line("PE", s.id, s.name, s.locoAddress, s.speed, fb(s.endA), fb(s.endB), fb(s.brakeA), fb(s.brakeB), s.brakeSpeed, s.waitSeconds)
@@ -158,6 +164,12 @@ object RouteCodec {
                             RouteSetting(a.toIntOrNull() ?: return@mapNotNull null, p == "a")
                         },
                         parseFb(at(4)), parseFb(at(5)),
+                        at(6),
+                        at(7).split(' ').mapNotNull { token ->
+                            val xy = token.split(',')
+                            if (xy.size != 2) return@mapNotNull null
+                            (xy[0].toIntOrNull() ?: return@mapNotNull null) to (xy[1].toIntOrNull() ?: return@mapNotNull null)
+                        },
                     )
                     "PE" -> shuttles += Shuttle(
                         at(1), at(2), int(3, 3), int(4, 60), parseFb(at(5)), parseFb(at(6)), parseFb(at(7)), parseFb(at(8)),
