@@ -429,14 +429,14 @@ private fun ShuttleEditor(app: MobaApp, shuttle: Shuttle, isNew: Boolean, save: 
         Label("Ende A (Rückwärts dorthin)")
         FeedbackRow {
             FeedbackField("Endmelder A", endA) { endA = it }
-            FeedbackField("Bremsmelder A (optional)", brakeA) { brakeA = it }
+            FeedbackField("Bremsmelder A", brakeA) { brakeA = it }
         }
         Label("Ende B (Vorwärts dorthin)")
         FeedbackRow {
             FeedbackField("Endmelder B", endB) { endB = it }
-            FeedbackField("Bremsmelder B (optional)", brakeB) { brakeB = it }
+            FeedbackField("Bremsmelder B", brakeB) { brakeB = it }
         }
-        Hint("Die Lok fährt vorwärts bis Melder B, hält, wartet und fährt rückwärts bis Melder A. Mit Bremsmeldern fährt sie davor langsamer.")
+        Hint("Die Lok fährt vorwärts bis Melder B, hält, wartet und fährt rückwärts bis Melder A. Bremsmelder sind freiwillig: dort fährt sie mit der Bremsstufe weiter.")
         message?.let { Error(it) }
         EditorButtons(isNew, onDelete = { service.deleteShuttle(shuttle.id) }) {
             save {
