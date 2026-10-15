@@ -56,6 +56,20 @@ import de.moba.modules.trackplan.ui.EditTool
 import de.moba.modules.trackplan.ui.TrackPlanMode
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanUiState
+import de.moba.modules.routes.RouteModule
+import de.moba.modules.routes.RouteRepository
+import de.moba.modules.routes.api.Feedback
+import de.moba.modules.routes.api.Route
+import de.moba.modules.routes.api.RouteBook
+import de.moba.modules.routes.api.RouteService
+import de.moba.modules.routes.api.RouteSetting
+import de.moba.modules.routes.api.RouteStore
+import de.moba.modules.routes.api.Shuttle
+import de.moba.modules.routes.api.TrainRoute
+import de.moba.modules.routes.api.TrainRouteStep
+import de.moba.modules.routes.ui.RoutesScreen
+import de.moba.modules.routes.ui.RoutesTab
+import de.moba.modules.routes.ui.RoutesUiState
 import de.moba.modules.symbols.SymbolModule
 import de.moba.modules.symbols.SymbolRepository
 import de.moba.modules.symbols.api.SignalCatalog
@@ -174,6 +188,28 @@ class ScreenshotTest {
                 saved = profiles
             }
         }
+        val proRoutes = RouteRepository(
+            object : RouteStore {
+                override fun load() = RouteBook(
+                    routes = listOf(
+                        Route("fs-1", "Bahnhof Gleis 1 → Strecke", listOf(RouteSetting(12, true), RouteSetting(22, false), RouteSetting(30, false)), Feedback(1, 1), Feedback(1, 4)),
+                        Route("fs-2", "Strecke → Bahnhof Gleis 2", listOf(RouteSetting(41, true), RouteSetting(30, true)), Feedback(1, 5), Feedback(1, 8)),
+                        Route("fs-3", "Schattenbahnhof Ausfahrt", listOf(RouteSetting(51, false), RouteSetting(52, true)), null, Feedback(2, 3)),
+                    ),
+                    shuttles = listOf(
+                        Shuttle("pe-1", "Nebenbahn Pendel", 12, speed = 50, endA = Feedback(3, 1), endB = Feedback(3, 8), brakeB = Feedback(3, 7), waitSeconds = 20),
+                    ),
+                    trainRoutes = listOf(
+                        TrainRoute(
+                            "zr-1", "Güterzug Rundfahrt", 5, speed = 70,
+                            steps = listOf(TrainRouteStep("fs-1", waitSeconds = 15), TrainRouteStep("fs-2", stopAt = Feedback(1, 7), speed = 40)),
+                            repeat = true,
+                        ),
+                    ),
+                )
+                override fun save(book: RouteBook) = Unit
+            },
+        )
         val pro = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator),
@@ -182,6 +218,7 @@ class ScreenshotTest {
                     DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)),
                     DecoderModule(DecoderRepository(null)), SymbolModule(SymbolRepository(null)),
                     ThrottleBarModule(ThrottleBarRepository(proThrottles)), CalibrationModule(CalibrationRepository(proCalibration)),
+                    RouteModule(proRoutes),
                 )
             },
             license = LicenseInfo.of("pro", "decoder"),
@@ -447,6 +484,48 @@ class ScreenshotTest {
             MobaShell(pro, withCalibration, listOf(DrivingPanel), initialScreen = CalibrationScreen.moduleId)
         }
         pro.session.value!!.host.service(CalibrationService::class)!!.cancel()
+
+        // Fahrstrassen, Pendelstrecken und Zugrouten (stellen ab Basis, Automatik ab Pro)
+        val withRoutes = withCalibration + RoutesScreen
+        val proRouteService = pro.session.value!!.host.service(RouteService::class)!!
+        proRouteService.setRoute("fs-1")
+        RoutesUiState.tab.value = RoutesTab.ROUTES
+        RoutesUiState.select("fs-1")
+        render("pc-fahrstrassen-pro-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        RoutesUiState.select(null)
+        app.setDarkTheme(false)
+        render("handy-fahrstrassen-pro-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        RoutesUiState.select("fs-2")
+        render("handy-fahrstrasse-bearbeiten-pro-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        proRouteService.releaseRoute("fs-1")
+        proRouteService.startShuttle("pe-1")
+        delay(200)
+        RoutesUiState.tab.value = RoutesTab.SHUTTLES
+        RoutesUiState.select("pe-1")
+        render("pc-pendelstrecke-pro-hell", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        proRouteService.stopAutomation("pe-1")
+        proRouteService.startTrainRoute("zr-1")
+        delay(500)
+        app.setDarkTheme(true)
+        RoutesUiState.tab.value = RoutesTab.TRAINS
+        RoutesUiState.select("zr-1")
+        render("pc-zugroute-pro-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        RoutesUiState.select(null)
+        render("handy-zugrouten-pro-dunkel", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId)
+        }
+        proRouteService.stopAutomation("zr-1")
+        delay(100)
 
         // Fahrpult rechts eingeblendet (anfangs aus) und groessere Symbole in der Leiste "Gleisformen"
         app.setDarkTheme(true)

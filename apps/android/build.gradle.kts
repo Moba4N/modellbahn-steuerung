@@ -46,6 +46,8 @@ dependencies {
     implementation(project(":modules:throttles:impl"))
     implementation(project(":modules:calibration:ui"))
     implementation(project(":modules:calibration:impl"))
+    implementation(project(":modules:routes:ui"))
+    implementation(project(":modules:routes:impl"))
     implementation(project(":modules:decoder:ui"))
     implementation(project(":modules:decoder:impl"))
     implementation(project(":adapters:catalog"))

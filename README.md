@@ -29,6 +29,7 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und 
 | `modules/symbols` | Modul "Symbole": Pixel-Editor fuer eigene Symbole, Licht- und Formsignale (DE, CH, NL) |
 | `modules/throttles` | Modul "Mehrere Fahrregler": Leiste mit bis zu sechs Fahrreglern am unteren Rand (ab Pro) |
 | `modules/calibration` | Modul "Loks einmessen": Geschwindigkeit je Fahrstufe (14, 28, 128) ueber eine Messstrecke (ab Pro) |
+| `modules/routes` | Modul "Fahrstraßen": Fahrstrassen (stellen ab Basis), Pendelstrecken und Zugrouten (fahren ab Pro) |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
 | `tools/sandbox` | Startet Kern, Simulator und Beispielmodule auf der Konsole |
@@ -172,6 +173,24 @@ Die Zentrale faehrt intern immer mit 128 Fahrstufen; fuer 14 und 28 nimmt die Ap
 Kommt ein Melder nicht innerhalb von 180 Sekunden, gilt die Stufe als zu langsam. Ergebnis: Kurve, Tabelle,
 Hoechstgeschwindigkeit und "ab welcher Fahrstufe faehrt die Lok X km/h". Gespeichert in `einmessen.txt`.
 
+## Fahrstrassen, Pendelstrecken, Zugrouten
+
+Der Reiter "Fahrstraßen" hat drei Bereiche. Anlegen und Bearbeiten ist in jeder Version moeglich.
+
+- **Fahrstrassen** (stellen ab Basis): eine Liste von Weichen- und Signaladressen mit gerade/abzweig, dazu ein
+  optionaler Start- und ein Zielmelder (s88 als `Modul.Kontakt`, z. B. `1.3`). "Stellen" schaltet die Weichen
+  nacheinander mit 150 ms Pause. Eine gestellte Fahrstrasse sperrt ihre Adressen: eine zweite Fahrstrasse mit
+  einer gemeinsamen Weiche laesst sich erst stellen, wenn die erste aufgeloest ist. Wird der Zielmelder belegt,
+  loest sie sich von selbst auf.
+- **Pendelstrecken** (ab Pro): eine Lok faehrt vorwaerts bis Endmelder B, haelt, wartet und faehrt rueckwaerts bis
+  Endmelder A, immer wieder. Optionale Bremsmelder schalten vorher auf die Bremsstufe.
+- **Zugrouten** (ab Pro): eine Lok faehrt nacheinander ueber mehrere Fahrstrassen. Jeder Abschnitt stellt seine
+  Fahrstrasse, sobald sie frei ist, faehrt bis zum Haltemelder (leer = Zielmelder der Fahrstrasse), haelt, loest auf
+  und wartet. Mit "Immer wieder von vorn" faehrt die Route im Kreis.
+
+"Stopp" haelt die Lok sofort an und gibt alle Fahrstrassen der Automatik frei. Eine Lok kann nur in einer Automatik
+gleichzeitig fahren. Gespeichert in `fahrstrassen.txt`.
+
 ## Symbole
 
 Der Symbol-Editor arbeitet wie in TrainController: quadratische Pixelbilder (16, 24, 32 oder 48 Pixel)
@@ -232,4 +251,4 @@ Den privaten Schluessel gibt es nur ausserhalb des Repositorys. Lizenzen erstell
 
 - s88-Zuordnung an der YD7001 pruefen; falls noetig LocoNet-Adapter
 - Zentralen-Paket Stufe B (USB/seriell): Intellibox und Tams (P50X), Lenz LI-USB, LocoNet, Maerklin 6050
-- Phase 2: Rueckmelder-Modul, Lokverwaltung; Fahrstrassen im Gleisbild
+- Phase 2: Rueckmelder-Modul; Fahrstrassen direkt im Gleisbild anklicken und Belegung anzeigen

@@ -21,6 +21,9 @@ import de.moba.core.runtime.ManufacturerKey
 import de.moba.modules.calibration.CalibrationModule
 import de.moba.modules.calibration.CalibrationRepository
 import de.moba.modules.calibration.FileCalibrationStore
+import de.moba.modules.routes.FileRouteStore
+import de.moba.modules.routes.RouteModule
+import de.moba.modules.routes.RouteRepository
 import de.moba.modules.throttles.FileThrottleBarStore
 import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
@@ -42,11 +45,12 @@ class MobaApplication : Application() {
         val decoders = DecoderRepository(FileDecoderStore(File(filesDir, "decoder.txt")))
         val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(filesDir, "fahrregler.txt")))
         val calibration = CalibrationRepository(FileCalibrationStore(File(filesDir, "einmessen.txt")))
+        val routes = RouteRepository(FileRouteStore(File(filesDir, "fahrstrassen.txt")))
         MobaApp(
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
             drivers = StationCatalog.drivers,
             discovery = StationCatalog.discovery,
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration)) },
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes)) },
             settings = object : SettingsStore {
                 override fun get(key: String): String? = prefs.getString(key, null)
                 override fun set(key: String, value: String) = prefs.edit().putString(key, value).apply()

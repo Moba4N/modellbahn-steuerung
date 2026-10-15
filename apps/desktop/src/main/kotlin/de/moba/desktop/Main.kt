@@ -34,6 +34,10 @@ import de.moba.modules.calibration.CalibrationModule
 import de.moba.modules.calibration.CalibrationRepository
 import de.moba.modules.calibration.FileCalibrationStore
 import de.moba.modules.calibration.ui.CalibrationScreen
+import de.moba.modules.routes.FileRouteStore
+import de.moba.modules.routes.RouteModule
+import de.moba.modules.routes.RouteRepository
+import de.moba.modules.routes.ui.RoutesScreen
 import de.moba.modules.throttles.FileThrottleBarStore
 import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
@@ -64,6 +68,7 @@ private val symbols = SymbolRepository(FileSymbolStore(File(dataDir, "symbole.tx
 private val decoders = DecoderRepository(FileDecoderStore(File(dataDir, "decoder.txt")))
 private val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dataDir, "fahrregler.txt")))
 private val calibration = CalibrationRepository(FileCalibrationStore(File(dataDir, "einmessen.txt")))
+private val routes = RouteRepository(FileRouteStore(File(dataDir, "fahrstrassen.txt")))
 
 /** Hintergrundbild als Kopie im Datenordner, damit es auch nach Verschieben des Originals bleibt. */
 private object DesktopImageStore : ImageStore {
@@ -109,7 +114,7 @@ fun main() = application {
                 scope = scope,
                 drivers = StationCatalog.drivers,
                 discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration)) },
+                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes)) },
                 settings = DesktopSettings,
                 imageStore = DesktopImageStore,
                 licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
@@ -118,7 +123,7 @@ fun main() = application {
         val picker = remember { imagePicker(window) }
         MobaShell(
             app,
-            screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen, CalibrationScreen),
+            screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen, CalibrationScreen, RoutesScreen),
             panels = listOf(DrivingPanel),
             docks = listOf(ThrottleDock),
             imagePicker = picker,
