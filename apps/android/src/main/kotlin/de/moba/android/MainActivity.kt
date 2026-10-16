@@ -56,8 +56,6 @@ class MainActivity : ComponentActivity() {
                 imagePicker = picker,
                 exitGuard = exitGuard,
                 onExit = ::finish,
-                // Auf dem Tablet quer dieselbe Menueleiste wie unter Windows
-                menuBar = true,
             )
         }
     }

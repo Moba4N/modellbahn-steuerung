@@ -86,7 +86,6 @@ import de.moba.modules.symbols.api.SymbolService
 import de.moba.ui.shell.LocalWideLayout
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
-import de.moba.ui.shell.MenuEntry
 import de.moba.ui.shell.ModuleScreen
 import de.moba.ui.shell.ShellUiState
 import de.moba.ui.shell.StatusPill
@@ -137,42 +136,6 @@ object TrackPlanScreen : ModuleScreen {
         return UnsavedWork("Gleisbilder", service.canSave) { service.save() }
     }
 
-    override fun menuEntries(app: MobaApp): List<MenuEntry> {
-        val mode = TrackPlanUiState.mode.value
-        fun setMode(m: TrackPlanMode) {
-            TrackPlanUiState.mode.value = m
-            say(null)
-        }
-        val entries = mutableListOf(
-            MenuEntry("Betrieb", checked = mode == TrackPlanMode.BETRIEB) { setMode(TrackPlanMode.BETRIEB) },
-            MenuEntry("Bearbeiten", checked = mode == TrackPlanMode.BEARBEITEN) { setMode(TrackPlanMode.BEARBEITEN) },
-        )
-        val service = app.session.value?.host?.service(TrackPlanService::class) ?: return entries
-        val plans = service.plans.value
-        val visible = service.visiblePlans.value
-        plans.forEachIndexed { i, plan ->
-            entries += MenuEntry("${plan.name} zeigen", checked = plan.id in visible, separatorBefore = i == 0) {
-                setMode(TrackPlanMode.BETRIEB)
-                try {
-                    service.toggleVisible(plan.id)
-                } catch (e: LicenseRequiredException) {
-                    say(e.message)
-                }
-            }
-        }
-        if (ShellUiState.separateWindows.value) {
-            val pro = service.maxVisiblePlans > 1
-            val open = TrackPlanWindows.open(app).value
-            plans.forEachIndexed { i, plan ->
-                entries += MenuEntry("${plan.name} in eigenem Fenster", checked = pro && plan.id in open, enabled = pro, separatorBefore = i == 0) {
-                    setMode(TrackPlanMode.BETRIEB)
-                    if (plan.id in open) TrackPlanWindows.close(app, plan.id) else say(TrackPlanWindows.detach(app, plan.id))
-                }
-            }
-            if (!pro) entries += MenuEntry("Eigene Fenster gibt es ab Pro", enabled = false) {}
-        }
-        return entries
-    }
 
     @Composable
     @OptIn(ExperimentalLayoutApi::class)

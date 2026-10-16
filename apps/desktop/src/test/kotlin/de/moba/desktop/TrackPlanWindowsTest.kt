@@ -1,10 +1,6 @@
 package de.moba.desktop
 
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -24,7 +20,6 @@ import de.moba.modules.trackplan.ui.TrackPlanMode
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanUiState
 import de.moba.modules.trackplan.ui.TrackPlanWindows
-import de.moba.ui.shell.MENU_BAR_TAG
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.ModuleWindowFrame
@@ -40,9 +35,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Menueleiste oben mit den Unterpunkten der Reiter; Gleisbilder in eigenen Fenstern (Pro). */
+/** Gleisbilder in eigenen Fenstern (Pro, Windows). */
 @OptIn(ExperimentalTestApi::class)
-class MenuBarAndWindowsTest {
+class TrackPlanWindowsTest {
     private fun app(license: LicenseInfo): MobaApp = runBlocking {
         val plans = object : TrackPlanStore {
             override fun load() = listOf(DemoPlans.layout(), DemoPlans.stagingYard(), DemoPlans.industry())
@@ -58,42 +53,24 @@ class MenuBarAndWindowsTest {
 
     private val screens = listOf(DrivingScreen, TrackPlanScreen)
 
-    private fun SemanticsNodeInteractionsProvider.menu(title: String) =
-        onNode(hasText(title) and hasAnyAncestor(hasTestTag(MENU_BAR_TAG)))
-
     @BeforeTest
     @AfterTest
     fun reset() {
         TrackPlanWindows.reset()
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
-        ShellUiState.menuBarOpen.value = null
         ShellUiState.separateWindows.value = false
-    }
-
-    @Test
-    fun menuBarReachesSubItems() = runComposeUiTest {
-        val app = app(LicenseInfo.of("basis"))
-        setContent { MobaShell(app, screens, menuBar = true) }
-        menu("Gleisbild").performClick()
-        waitForIdle()
-        onNodeWithText("Bearbeiten").performClick()
-        waitForIdle()
-        assertEquals(TrackPlanMode.BEARBEITEN, TrackPlanUiState.mode.value)
-        // Der Reiter ist jetzt offen: Editor mit seinen Werkzeugen
-        onNodeWithText("Speichern").assertExists()
     }
 
     @Test
     fun planOpensInOwnWindowWithPro() = runComposeUiTest {
         val app = app(LicenseInfo.of("pro"))
-        setContent { MobaShell(app, screens, menuBar = true, separateWindows = true, initialScreen = TrackPlanScreen.moduleId) }
-        menu("Gleisbild").performClick()
+        setContent { MobaShell(app, screens, separateWindows = true, initialScreen = TrackPlanScreen.moduleId) }
+        // Anfangs ist nur die Beispielanlage eingeblendet; ihr Kopf hat den Knopf "Eigenes Fenster"
+        onNodeWithText("Eigenes Fenster").performClick()
         waitForIdle()
-        onNodeWithText("Schattenbahnhof in eigenem Fenster").performClick()
-        waitForIdle()
-        assertEquals(listOf("schattenbahnhof"), TrackPlanWindows.open(app).value)
+        assertEquals(listOf("beispiel"), TrackPlanWindows.open(app).value)
         val service = app.session.value!!.host.service(TrackPlanService::class)!!
-        assertTrue("schattenbahnhof" in service.visiblePlans.value)
+        assertTrue("beispiel" in service.visiblePlans.value)
         // Im Hauptfenster traegt sein Schalter jetzt das Fenster-Zeichen
         onNodeWithContentDescription("In eigenem Fenster").assertExists()
     }

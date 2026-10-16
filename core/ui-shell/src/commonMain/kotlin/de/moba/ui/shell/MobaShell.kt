@@ -92,9 +92,6 @@ object ShellUiState {
     /** Modul-Id des offenen Werkzeugs aus dem Burger-Menue, z. B. Monitor; `null` = keins. */
     val openTool = MutableStateFlow<String?>(null)
 
-    /** Aufgeklapptes Menue der Menueleiste (sein Titel); `null` = keins. */
-    val menuBarOpen = MutableStateFlow<String?>(null)
-
     /** Kann die App Ansichten in eigenen Fenstern zeigen, etwa auf weiteren Bildschirmen? Unter Windows ja. */
     val separateWindows = MutableStateFlow(false)
 }
@@ -127,8 +124,6 @@ fun MobaShell(
     /** Fragt vor dem Beenden nach ungespeicherten Aenderungen; [onExit] beendet dann die App. */
     exitGuard: ExitGuard? = null,
     onExit: () -> Unit = {},
-    /** Menueleiste wie unter Windows unter der Statusleiste (nur auf breiten Bildschirmen). */
-    menuBar: Boolean = false,
     /** Die Plattform kann eigene Fenster oeffnen, z. B. Gleisbilder auf weiteren Bildschirmen (Windows). */
     separateWindows: Boolean = false,
 ) {
@@ -177,17 +172,6 @@ fun MobaShell(
                         onNavigate = { current = it },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    if (menuBar && wide) {
-                        MenuBar(
-                            shellMenus(
-                                app, visible, activeTools, current,
-                                panelAvailable = activePanels.isNotEmpty(),
-                                onNavigate = { current = it },
-                                onExit = { exitGuard?.request() ?: onExit() },
-                            ),
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    }
                     Row(Modifier.weight(1f).fillMaxWidth()) {
                         if (wide) {
                             NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
@@ -280,73 +264,6 @@ fun MobaShell(
             }
         }
     }
-}
-
-/** Inhalt der Menueleiste: feste Menues plus eines je Reiter mit dessen Unterpunkten. */
-private fun shellMenus(
-    app: MobaApp,
-    screens: List<ModuleScreen>,
-    tools: List<ModuleTool>,
-    current: String,
-    panelAvailable: Boolean,
-    onNavigate: (String) -> Unit,
-    onExit: () -> Unit,
-): List<MenuSpec> = buildList {
-    add(
-        MenuSpec("Datei") {
-            val pending = screens.mapNotNull { it.unsavedWork(app) }
-            listOf(
-                MenuEntry("Alles speichern", enabled = pending.any { it.canSave }) {
-                    pending.filter { it.canSave }.forEach { runCatching { it.save() } }
-                },
-                MenuEntry("Beenden", separatorBefore = true, onClick = onExit),
-            )
-        },
-    )
-    add(
-        MenuSpec("Ansicht") {
-            val dark = app.darkTheme.value
-            buildList {
-                add(MenuEntry("Übersicht", checked = current == OVERVIEW) { onNavigate(OVERVIEW) })
-                screens.forEach { s -> add(MenuEntry(s.title, checked = current == s.moduleId) { onNavigate(s.moduleId) }) }
-                if (panelAvailable) {
-                    add(MenuEntry("Fahrpult rechts", checked = ShellUiState.panelOpen.value, separatorBefore = true) {
-                        ShellUiState.panelOpen.value = !ShellUiState.panelOpen.value
-                    })
-                }
-                add(MenuEntry(if (dark) "Helles Design" else "Dunkles Design", separatorBefore = !panelAvailable) { app.setDarkTheme(!dark) })
-                add(MenuEntry("Erscheinungsbild …") { ShellUiState.appearanceOpen.value = true })
-            }
-        },
-    )
-    screens.forEach { screen ->
-        add(
-            MenuSpec(screen.title) {
-                val open = MenuEntry("${screen.title} öffnen", checked = current == screen.moduleId) { onNavigate(screen.moduleId) }
-                listOf(open) + screen.menuEntries(app).mapIndexed { i, e ->
-                    MenuEntry(e.title, e.checked, e.enabled, separatorBefore = i == 0 || e.separatorBefore) {
-                        onNavigate(screen.moduleId)
-                        e.onClick()
-                    }
-                }
-            },
-        )
-    }
-    add(
-        MenuSpec("Zentrale") {
-            val connected = app.connected.value
-            val power = app.trackPower.value
-            listOf(
-                MenuEntry("Gleisspannung an", checked = power, enabled = connected) { app.setTrackPower(!power) },
-                MenuEntry("Nothalt", enabled = connected) { app.emergencyStop() },
-                MenuEntry("Verbindung …", separatorBefore = true) { onNavigate(OVERVIEW) },
-            )
-        },
-    )
-    if (tools.isNotEmpty()) {
-        add(MenuSpec("Werkzeuge") { tools.map { t -> MenuEntry("${t.title} …") { ShellUiState.openTool.value = t.moduleId } } })
-    }
-    add(MenuSpec("Hilfe") { listOf(MenuEntry("Lizenz …") { ShellUiState.licenseOpen.value = true }) })
 }
 
 private class Destination(val id: String, val title: String, val icon: ImageVector)

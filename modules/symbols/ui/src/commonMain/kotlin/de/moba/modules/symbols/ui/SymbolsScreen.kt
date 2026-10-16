@@ -68,7 +68,6 @@ import de.moba.modules.symbols.api.SymbolDef
 import de.moba.modules.symbols.api.SymbolService
 import de.moba.modules.symbols.api.SymbolState
 import de.moba.ui.shell.LocalWideLayout
-import de.moba.ui.shell.MenuEntry
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.ModuleScreen
@@ -122,9 +121,6 @@ object SymbolsScreen : ModuleScreen {
     override val title = "Symbole"
     override val icon = Icons.Outlined.Interests
 
-    override fun menuEntries(app: MobaApp): List<MenuEntry> = SymbolsTab.entries.map { t ->
-        MenuEntry(t.label, checked = SymbolsUiState.tab.value == t) { SymbolsUiState.tab.value = t }
-    }
 
     @Composable
     override fun Content(app: MobaApp) {

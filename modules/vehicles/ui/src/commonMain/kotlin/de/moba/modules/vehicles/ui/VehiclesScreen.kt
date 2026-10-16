@@ -79,7 +79,6 @@ import de.moba.modules.vehicles.api.WagonCategory
 import de.moba.modules.vehicles.api.WagonClass
 import de.moba.modules.vehicles.api.WagonTemplates
 import de.moba.ui.shell.LocalWideLayout
-import de.moba.ui.shell.MenuEntry
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.ModuleScreen
@@ -111,13 +110,6 @@ object VehiclesScreen : ModuleScreen {
     override val title = "Fahrzeuge"
     override val icon = Icons.Outlined.DirectionsRailway
 
-    override fun menuEntries(app: MobaApp): List<MenuEntry> = VehicleGroup.entries.map { g ->
-        MenuEntry(g.label, checked = VehiclesUiState.group.value == g) {
-            VehiclesUiState.group.value = g
-            VehiclesUiState.draft.value = null
-            say(null)
-        }
-    }
 
     @Composable
     override fun Content(app: MobaApp) {

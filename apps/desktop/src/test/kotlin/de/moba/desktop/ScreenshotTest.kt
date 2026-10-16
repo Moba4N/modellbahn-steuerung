@@ -634,30 +634,15 @@ class ScreenshotTest {
         FunctionKeysState.reset()
         DrivingUiState.selected.value = null
 
-        // Menueleiste wie unter Windows und Gleisbilder in eigenen Fenstern (Pro)
+        // Gleisbilder in eigenen Fenstern (Pro)
         pro.setDarkTheme(true)
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
         ShellUiState.separateWindows.value = true
         TrackPlanWindows.reset()
         TrackPlanWindows.detach(pro, "schattenbahnhof")
-        ShellUiState.menuBarOpen.value = "Gleisbild"
-        render("pc-menueleiste-gleisbild-dunkel", 1440, 900, 1f) {
-            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, menuBar = true, separateWindows = true)
-        }
-        pro.setDarkTheme(false)
-        ShellUiState.menuBarOpen.value = "Ansicht"
-        render("pc-menueleiste-ansicht-hell", 1440, 900, 1f) {
-            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId, menuBar = true, separateWindows = true)
-        }
-        ShellUiState.menuBarOpen.value = "Fahrstraßen"
-        render("pc-menueleiste-fahrstrassen-hell", 1440, 900, 1f) {
-            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId, menuBar = true, separateWindows = true)
-        }
-        ShellUiState.menuBarOpen.value = null
-        pro.setDarkTheme(true)
         TrackPlanWindows.detach(pro, "industrie")
         render("pc-gleisbild-hauptfenster-zwei-fenster-dunkel", 1440, 900, 1f) {
-            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, menuBar = true, separateWindows = true)
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, separateWindows = true)
         }
         for ((id, name) in listOf("schattenbahnhof" to "Schattenbahnhof", "industrie" to "Industrie")) {
             render("pc-gleisbild-fenster-$id-dunkel", 1920, 1080, 1f) {

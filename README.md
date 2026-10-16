@@ -151,7 +151,7 @@ Sind Gleisbilder beim Schliessen (Windows) oder Zurueck (Android) ungespeichert,
 | Gleisbilder in eigenen Fenstern (Windows) | nein | nein | bis zu 3 |
 
 Mit Pro laesst sich unter Windows jedes eingeblendete Gleisbild in ein eigenes Fenster holen ("Eigenes Fenster"
-im Kopf des Gleisbilds oder Menueleiste > Gleisbild), z. B. Bahnhof, Schattenbahnhof und Industrie auf drei
+im Kopf des Gleisbilds), z. B. Bahnhof, Schattenbahnhof und Industrie auf drei
 Bildschirmen. Das Gleisbild passt sich ans Fenster an; F11 oder "Vollbild" fuellt den ganzen Bildschirm, Esc
 beendet das Vollbild. Jedes Fenster hat einen eigenen Nothalt. "Ins Hauptfenster" oder Schliessen holt das
 Gleisbild zurueck. Lage, Groesse und Vollbild merkt sich die App und oeffnet die Fenster beim naechsten Start
@@ -232,16 +232,6 @@ Daten: `SignalData.kt` (Lichtsignale) und `FormSignalData.kt` (Formsignale) in `
 | Eigene Symbole speichern | nein | nein | ja |
 
 Die Symbole liegen in `symbole.txt` neben den Gleisbildern.
-
-## Menueleiste
-
-Unter Windows (und auf dem Tablet quer) steht unter der Statusleiste eine Menueleiste wie in Windows-Programmen:
-Datei (Alles speichern, Beenden), Ansicht (alle Reiter, Fahrpult rechts, hell/dunkel, Erscheinungsbild),
-je ein Menue pro Reiter mit dessen Unterpunkten (z. B. Fahren: Loks, Fahrpult schliessen; Fahrzeuge:
-Lokomotiven, Gueterwagen, Personenwagen; Gleisbild: Betrieb, Bearbeiten, Gleisbilder zeigen, eigene Fenster;
-Fahrstrassen: Fahrstrassen, Pendelstrecken, Zugrouten), Zentrale (Gleisspannung, Nothalt, Verbindung),
-Werkzeuge (Monitor) und Hilfe (Lizenz). Module haengen ihre Unterpunkte ueber `ModuleScreen.menuEntries` ein.
-Auf dem Handy bleibt es beim Burger-Menue.
 
 ## Erscheinungsbild
 

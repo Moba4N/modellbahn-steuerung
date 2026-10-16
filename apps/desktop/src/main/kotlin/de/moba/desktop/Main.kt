@@ -135,7 +135,6 @@ fun main() = application {
             imagePicker = picker,
             exitGuard = exitGuard,
             onExit = ::exitApplication,
-            menuBar = true,
             separateWindows = true,
         )
     }

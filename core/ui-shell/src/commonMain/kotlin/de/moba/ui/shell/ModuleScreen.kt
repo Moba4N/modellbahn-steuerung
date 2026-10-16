@@ -15,23 +15,7 @@ interface ModuleScreen {
     /** Aenderungen dieses Reiters, die beim Beenden verloren gingen; `null` = alles gespeichert. */
     fun unsavedWork(app: MobaApp): UnsavedWork? = null
 
-    /**
-     * Unterpunkte fuer das Menue dieses Reiters in der Menueleiste oben, z. B. die Bereiche des Reiters.
-     * Wird beim Aufklappen gelesen; vor [MenuEntry.onClick] wechselt die App schon zu diesem Reiter.
-     */
-    fun menuEntries(app: MobaApp): List<MenuEntry> = emptyList()
 }
-
-/** Ein Eintrag in einem Menue der Menueleiste. */
-class MenuEntry(
-    val title: String,
-    /** Mit Haken davor, z. B. der gerade gewaehlte Bereich. */
-    val checked: Boolean = false,
-    val enabled: Boolean = true,
-    /** Trennlinie ueber diesem Eintrag. */
-    val separatorBefore: Boolean = false,
-    val onClick: () -> Unit,
-)
 
 /** Ungespeicherte Aenderungen, nach denen die App vor dem Beenden fragt. */
 class UnsavedWork(
