@@ -72,6 +72,7 @@ import de.moba.modules.decoder.api.DecoderService
 import de.moba.modules.decoder.api.ProgrammingTrack
 import de.moba.modules.decoder.api.StandardCvs
 import de.moba.ui.shell.LocalWideLayout
+import de.moba.ui.shell.MenuEntry
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.ModuleScreen
@@ -127,6 +128,10 @@ object DecoderScreen : ModuleScreen {
     override val moduleId = DECODER_MODULE_ID
     override val title = "Decoder"
     override val icon = Icons.Outlined.Memory
+
+    override fun menuEntries(app: MobaApp): List<MenuEntry> = ProgrammingTrack.entries.map { t ->
+        MenuEntry(t.label, checked = DecoderUiState.track.value == t) { DecoderUiState.track.value = t }
+    }
 
     @Composable
     override fun Content(app: MobaApp) {

@@ -52,6 +52,7 @@ import de.moba.core.station.LocoState
 import de.moba.modules.driving.api.DRIVING_MODULE_ID
 import de.moba.modules.driving.api.DrivingService
 import de.moba.ui.shell.LocalPanelVisible
+import de.moba.ui.shell.MenuEntry
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.ModulePanel
 import de.moba.ui.shell.ModuleScreen
@@ -69,6 +70,16 @@ object DrivingScreen : ModuleScreen {
     override val moduleId = DRIVING_MODULE_ID
     override val title = "Fahren"
     override val icon = Icons.Outlined.Speed
+
+    override fun menuEntries(app: MobaApp): List<MenuEntry> {
+        val selected = DrivingUiState.selected.value
+        val locos = app.layout.layout.value.locos.sortedBy { it.address }
+        return locos.map { loco ->
+            MenuEntry("${loco.name} fahren", checked = selected == loco.address) { DrivingUiState.selected.value = loco.address }
+        } + MenuEntry("Fahrpult schließen", enabled = selected != null, separatorBefore = locos.isNotEmpty()) {
+            DrivingUiState.selected.value = null
+        }
+    }
 
     @Composable
     override fun Content(app: MobaApp) {

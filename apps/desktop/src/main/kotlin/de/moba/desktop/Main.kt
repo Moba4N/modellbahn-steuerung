@@ -20,6 +20,7 @@ import de.moba.modules.trackplan.FileTrackPlanStore
 import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.trackplan.ui.TrackPlanScreen
+import de.moba.modules.trackplan.ui.TrackPlanWindows
 import de.moba.modules.symbols.FileSymbolStore
 import de.moba.modules.symbols.SymbolModule
 import de.moba.modules.symbols.SymbolRepository
@@ -49,6 +50,7 @@ import de.moba.ui.shell.ImagePicker
 import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
+import de.moba.ui.shell.ModuleWindowsHost
 import de.moba.ui.shell.SettingsStore
 import java.awt.FileDialog
 import org.jetbrains.skia.Image
@@ -104,24 +106,25 @@ private val appIcon = BitmapPainter(
 fun main() = application {
     // Schliessen fragt nach, wenn noch Gleisbilder ungespeichert sind.
     val exitGuard = remember { ExitGuard() }
+    val scope = rememberCoroutineScope()
+    // Die App lebt neben allen Fenstern, damit Gleisbilder auch auf weiteren Bildschirmen laufen
+    val app = remember {
+        MobaApp(
+            scope = scope,
+            drivers = StationCatalog.drivers,
+            discovery = StationCatalog.discovery,
+            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes), MonitorModule()) },
+            settings = DesktopSettings,
+            imageStore = DesktopImageStore,
+            licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
+        ).also { it.start() }
+    }
     Window(
         onCloseRequest = exitGuard::request,
         title = "Modellbahn-Steuerung",
         icon = appIcon,
         state = rememberWindowState(width = 1360.dp, height = 860.dp),
     ) {
-        val scope = rememberCoroutineScope()
-        val app = remember {
-            MobaApp(
-                scope = scope,
-                drivers = StationCatalog.drivers,
-                discovery = StationCatalog.discovery,
-                moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes), MonitorModule()) },
-                settings = DesktopSettings,
-                imageStore = DesktopImageStore,
-                licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
-            ).also { it.start() }
-        }
         val picker = remember { imagePicker(window) }
         MobaShell(
             app,
@@ -132,6 +135,10 @@ fun main() = application {
             imagePicker = picker,
             exitGuard = exitGuard,
             onExit = ::exitApplication,
+            menuBar = true,
+            separateWindows = true,
         )
     }
+    // Gleisbilder in eigenen Fenstern (Pro), z. B. auf einem zweiten und dritten Bildschirm
+    ModuleWindowsHost(app, listOf(TrackPlanWindows), appIcon)
 }

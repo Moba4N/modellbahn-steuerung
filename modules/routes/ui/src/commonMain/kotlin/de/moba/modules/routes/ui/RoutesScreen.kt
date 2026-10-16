@@ -67,6 +67,7 @@ import de.moba.modules.routes.api.Shuttle
 import de.moba.modules.routes.api.TrainRoute
 import de.moba.modules.routes.api.TrainRouteStep
 import de.moba.ui.shell.LocalWideLayout
+import de.moba.ui.shell.MenuEntry
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.ModuleScreen
 import de.moba.ui.shell.SectionCard
@@ -102,6 +103,13 @@ object RoutesScreen : ModuleScreen {
     override val moduleId = ROUTES_MODULE_ID
     override val title = "Fahrstraßen"
     override val icon = Icons.Outlined.AltRoute
+
+    override fun menuEntries(app: MobaApp): List<MenuEntry> = RoutesTab.entries.map { t ->
+        MenuEntry(t.label, checked = RoutesUiState.tab.value == t) {
+            RoutesUiState.tab.value = t
+            RoutesUiState.select(null)
+        }
+    }
 
     @Composable
     override fun Content(app: MobaApp) {

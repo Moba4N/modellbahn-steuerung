@@ -56,6 +56,7 @@ import de.moba.modules.trackplan.ui.EditTool
 import de.moba.modules.trackplan.ui.TrackPlanMode
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanUiState
+import de.moba.modules.trackplan.ui.TrackPlanWindows
 import de.moba.modules.monitor.MonitorModule
 import de.moba.modules.monitor.api.MONITOR_MODULE_ID
 import de.moba.modules.monitor.api.MonitorKind
@@ -105,6 +106,7 @@ import de.moba.ui.shell.DesignStyle
 import de.moba.ui.shell.FontChoice
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
+import de.moba.ui.shell.ModuleWindowFrame
 import de.moba.ui.shell.ShellUiState
 import de.moba.ui.shell.TextSize
 import de.moba.ui.shell.WatermarkStrength
@@ -631,6 +633,43 @@ class ScreenshotTest {
         FunctionKeysState.set(pro, FunctionRange.F12)
         FunctionKeysState.reset()
         DrivingUiState.selected.value = null
+
+        // Menueleiste wie unter Windows und Gleisbilder in eigenen Fenstern (Pro)
+        pro.setDarkTheme(true)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        ShellUiState.separateWindows.value = true
+        TrackPlanWindows.reset()
+        TrackPlanWindows.detach(pro, "schattenbahnhof")
+        ShellUiState.menuBarOpen.value = "Gleisbild"
+        render("pc-menueleiste-gleisbild-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, menuBar = true, separateWindows = true)
+        }
+        pro.setDarkTheme(false)
+        ShellUiState.menuBarOpen.value = "Ansicht"
+        render("pc-menueleiste-ansicht-hell", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId, menuBar = true, separateWindows = true)
+        }
+        ShellUiState.menuBarOpen.value = "Fahrstraßen"
+        render("pc-menueleiste-fahrstrassen-hell", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = RoutesScreen.moduleId, menuBar = true, separateWindows = true)
+        }
+        ShellUiState.menuBarOpen.value = null
+        pro.setDarkTheme(true)
+        TrackPlanWindows.detach(pro, "industrie")
+        render("pc-gleisbild-hauptfenster-zwei-fenster-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, menuBar = true, separateWindows = true)
+        }
+        for ((id, name) in listOf("schattenbahnhof" to "Schattenbahnhof", "industrie" to "Industrie")) {
+            render("pc-gleisbild-fenster-$id-dunkel", 1920, 1080, 1f) {
+                ModuleWindowFrame(pro, name, fullscreen = false, onToggleFullscreen = {}, onClose = {}) { TrackPlanWindows.Content(pro, id) }
+            }
+        }
+        pro.setDarkTheme(false)
+        render("pc-gleisbild-fenster-industrie-hell", 1920, 1080, 1f) {
+            ModuleWindowFrame(pro, "Industrie", fullscreen = true, onToggleFullscreen = {}, onClose = {}) { TrackPlanWindows.Content(pro, "industrie") }
+        }
+        TrackPlanWindows.reset()
+        ShellUiState.separateWindows.value = false
 
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)

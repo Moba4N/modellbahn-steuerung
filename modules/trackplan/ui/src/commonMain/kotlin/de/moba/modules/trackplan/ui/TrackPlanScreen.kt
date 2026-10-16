@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -25,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
@@ -71,6 +73,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.moba.modules.trackplan.api.LicenseRequiredException
 import de.moba.modules.trackplan.api.TRACKPLAN_MODULE_ID
@@ -83,7 +86,9 @@ import de.moba.modules.symbols.api.SymbolService
 import de.moba.ui.shell.LocalWideLayout
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
+import de.moba.ui.shell.MenuEntry
 import de.moba.ui.shell.ModuleScreen
+import de.moba.ui.shell.ShellUiState
 import de.moba.ui.shell.StatusPill
 import de.moba.ui.shell.UnsavedWork
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -132,6 +137,43 @@ object TrackPlanScreen : ModuleScreen {
         return UnsavedWork("Gleisbilder", service.canSave) { service.save() }
     }
 
+    override fun menuEntries(app: MobaApp): List<MenuEntry> {
+        val mode = TrackPlanUiState.mode.value
+        fun setMode(m: TrackPlanMode) {
+            TrackPlanUiState.mode.value = m
+            say(null)
+        }
+        val entries = mutableListOf(
+            MenuEntry("Betrieb", checked = mode == TrackPlanMode.BETRIEB) { setMode(TrackPlanMode.BETRIEB) },
+            MenuEntry("Bearbeiten", checked = mode == TrackPlanMode.BEARBEITEN) { setMode(TrackPlanMode.BEARBEITEN) },
+        )
+        val service = app.session.value?.host?.service(TrackPlanService::class) ?: return entries
+        val plans = service.plans.value
+        val visible = service.visiblePlans.value
+        plans.forEachIndexed { i, plan ->
+            entries += MenuEntry("${plan.name} zeigen", checked = plan.id in visible, separatorBefore = i == 0) {
+                setMode(TrackPlanMode.BETRIEB)
+                try {
+                    service.toggleVisible(plan.id)
+                } catch (e: LicenseRequiredException) {
+                    say(e.message)
+                }
+            }
+        }
+        if (ShellUiState.separateWindows.value) {
+            val pro = service.maxVisiblePlans > 1
+            val open = TrackPlanWindows.open(app).value
+            plans.forEachIndexed { i, plan ->
+                entries += MenuEntry("${plan.name} in eigenem Fenster", checked = pro && plan.id in open, enabled = pro, separatorBefore = i == 0) {
+                    setMode(TrackPlanMode.BETRIEB)
+                    if (plan.id in open) TrackPlanWindows.close(app, plan.id) else say(TrackPlanWindows.detach(app, plan.id))
+                }
+            }
+            if (!pro) entries += MenuEntry("Eigene Fenster gibt es ab Pro", enabled = false) {}
+        }
+        return entries
+    }
+
     @Composable
     @OptIn(ExperimentalLayoutApi::class)
     override fun Content(app: MobaApp) {
@@ -176,7 +218,7 @@ object TrackPlanScreen : ModuleScreen {
                     }
                 }
                 when (mode) {
-                    TrackPlanMode.BETRIEB -> OperationView(service)
+                    TrackPlanMode.BETRIEB -> OperationView(app, service)
                     TrackPlanMode.BEARBEITEN -> EditorView(service)
                 }
             }
@@ -194,7 +236,7 @@ private fun ModeChip(label: String, icon: ImageVector, selected: Boolean, onClic
     )
 }
 
-private fun say(text: String?) {
+internal fun say(text: String?) {
     TrackPlanUiState.message.value = text
 }
 
@@ -209,11 +251,16 @@ private fun TrackPlanService.change(planId: String, transform: (TrackPlan) -> Tr
 
 // ---------------------------------------------------------------- Betrieb
 
-@OptIn(ExperimentalLayoutApi::class)
+/** Was ein Gleisbild im Betrieb braucht: Zustand der Weichen und Melder, Tippen auf Kacheln, Signalbild-Menue. */
+internal class PlanOperation(
+    val state: TrackState,
+    val onTap: (TrackPlan, Int, Int) -> Unit,
+    val menu: (TrackPlan) -> AspectOverlayData?,
+)
+
+/** Betrieb eines Gleisbilds; gleich im Hauptfenster und in eigenen Fenstern. */
 @Composable
-private fun ColumnScope.OperationView(service: TrackPlanService) {
-    val plans by service.plans.collectAsState()
-    val visible by service.visiblePlans.collectAsState()
+internal fun rememberPlanOperation(service: TrackPlanService): PlanOperation {
     val turnouts by service.turnouts.collectAsState()
     val occupied by service.occupied.collectAsState()
     val scope = rememberCoroutineScope()
@@ -222,40 +269,6 @@ private fun ColumnScope.OperationView(service: TrackPlanService) {
     val state = TrackState(turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, aspects, library) })
     // Offenes Signalbild-Menue (Gleisbild-Id, Kachel), wie in iTrain per Klick aufs Signal
     var aspectMenu by remember { mutableStateOf<Pair<String, TrackTile>?>(null) }
-    val wide = LocalWideLayout.current
-
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        plans.forEach { plan ->
-            val on = plan.id in visible
-            FilterChip(
-                selected = on,
-                onClick = {
-                    try {
-                        service.toggleVisible(plan.id)
-                        say(null)
-                    } catch (e: LicenseRequiredException) {
-                        say(e.message)
-                    }
-                },
-                label = { Text(plan.name) },
-                leadingIcon = if (on) {
-                    { Icon(Icons.Filled.Check, null, modifier = Modifier.size(16.dp)) }
-                } else {
-                    null
-                },
-            )
-        }
-        if (service.maxVisiblePlans > 1) {
-            StatusPill("Pro: bis zu ${service.maxVisiblePlans} Gleisbilder gleichzeitig", Moba.colors.signalGreen)
-        } else if (plans.size > 1) {
-            StatusPill("Mehrere Gleisbilder gleichzeitig ab Pro", Moba.colors.locked, Icons.Filled.Lock)
-        }
-    }
-
-    val shown = visible.mapNotNull { id -> plans.firstOrNull { it.id == id } }
     val onTap = { plan: TrackPlan, x: Int, y: Int ->
         plan.tileAt(x, y)?.takeIf { it.shape.hasAddress && it.address != null }?.let { tile ->
             if (tile.shape.kind == TileKind.SIGNAL && tileStates(tile, library).size > 2) {
@@ -278,18 +291,93 @@ private fun ColumnScope.OperationView(service: TrackPlanService) {
             }, onDismiss = { aspectMenu = null })
         }
     }
+    return PlanOperation(state, onTap, menu)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ColumnScope.OperationView(app: MobaApp, service: TrackPlanService) {
+    val plans by service.plans.collectAsState()
+    val visible by service.visiblePlans.collectAsState()
+    val op = rememberPlanOperation(service)
+    val wide = LocalWideLayout.current
+    // Gleisbilder in eigenen Fenstern (Windows, Pro) fehlen hier und tragen ein Fenster-Zeichen
+    val separate by ShellUiState.separateWindows.collectAsState()
+    val windowsAllowed = separate && service.maxVisiblePlans > 1
+    val detached by TrackPlanWindows.open(app).collectAsState()
+
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        plans.forEach { plan ->
+            val on = plan.id in visible
+            val outside = windowsAllowed && plan.id in detached
+            FilterChip(
+                selected = on,
+                onClick = {
+                    try {
+                        service.toggleVisible(plan.id)
+                        say(null)
+                    } catch (e: LicenseRequiredException) {
+                        say(e.message)
+                    }
+                },
+                label = { Text(plan.name) },
+                leadingIcon = when {
+                    outside -> {
+                        { Icon(Icons.AutoMirrored.Filled.OpenInNew, "In eigenem Fenster", modifier = Modifier.size(16.dp)) }
+                    }
+                    on -> {
+                        { Icon(Icons.Filled.Check, null, modifier = Modifier.size(16.dp)) }
+                    }
+                    else -> null
+                },
+            )
+        }
+        if (service.maxVisiblePlans > 1) {
+            StatusPill(
+                if (windowsAllowed) {
+                    "Pro: bis zu ${service.maxVisiblePlans} Gleisbilder, auch in eigenen Fenstern"
+                } else {
+                    "Pro: bis zu ${service.maxVisiblePlans} Gleisbilder gleichzeitig"
+                },
+                Moba.colors.signalGreen,
+            )
+        } else if (plans.size > 1) {
+            StatusPill(
+                if (separate) "Mehrere Gleisbilder und eigene Fenster ab Pro" else "Mehrere Gleisbilder gleichzeitig ab Pro",
+                Moba.colors.locked,
+                Icons.Filled.Lock,
+            )
+        }
+    }
+
+    val shown = visible.filter { !windowsAllowed || it !in detached }.mapNotNull { id -> plans.firstOrNull { it.id == id } }
+    if (shown.isEmpty() && visible.isNotEmpty()) {
+        Text(
+            "Alle eingeblendeten Gleisbilder stehen in eigenen Fenstern. „Ins Hauptfenster“ holt sie zurück.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    val onDetach: ((TrackPlan) -> Unit)? = if (windowsAllowed) {
+        { plan -> say(TrackPlanWindows.detach(app, plan.id)) }
+    } else {
+        null
+    }
+    val card = @Composable { plan: TrackPlan, modifier: Modifier, fill: Boolean ->
+        PlanCard(plan, op.state, modifier, fill = fill, onTap = op.onTap, menu = op.menu, onDetach = onDetach)
+    }
     if (wide) {
         Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when (shown.size) {
                 0 -> Unit
-                1 -> PlanCard(shown[0], state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap, menu = menu)
-                2 -> shown.forEach { PlanCard(it, state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap, menu = menu) }
+                1 -> card(shown[0], Modifier.weight(1f).fillMaxWidth(), true)
+                2 -> shown.forEach { card(it, Modifier.weight(1f).fillMaxWidth(), true) }
                 else -> {
-                    PlanCard(shown[0], state, Modifier.weight(1f).fillMaxWidth(), fill = true, onTap = onTap, menu = menu)
+                    card(shown[0], Modifier.weight(1f).fillMaxWidth(), true)
                     Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        shown.drop(1).forEach {
-                            PlanCard(it, state, Modifier.weight(1f).fillMaxHeight(), fill = true, onTap = onTap, menu = menu)
-                        }
+                        shown.drop(1).forEach { card(it, Modifier.weight(1f).fillMaxHeight(), true) }
                     }
                 }
             }
@@ -299,20 +387,25 @@ private fun ColumnScope.OperationView(service: TrackPlanService) {
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            shown.forEach { PlanCard(it, state, Modifier.fillMaxWidth(), fill = false, onTap = onTap, menu = menu) }
+            shown.forEach { card(it, Modifier.fillMaxWidth(), false) }
         }
     }
 }
 
 /** Ein Gleisbild im Betrieb, auf die verfuegbare Flaeche eingepasst. */
 @Composable
-private fun PlanCard(
+internal fun PlanCard(
     plan: TrackPlan,
     state: TrackState,
     modifier: Modifier,
     fill: Boolean,
     onTap: (TrackPlan, Int, Int) -> Unit,
     menu: (TrackPlan) -> AspectOverlayData? = { null },
+    /** Zeigt im Kopf "In eigenem Fenster"; `null` = geht hier nicht. */
+    onDetach: ((TrackPlan) -> Unit)? = null,
+    /** Feste Gleisgroesse, z. B. eingepasst ins eigene Fenster; sonst die eingestellte. */
+    cellSize: Dp? = null,
+    showTitle: Boolean = true,
 ) {
     Card(
         modifier = modifier,
@@ -321,15 +414,24 @@ private fun PlanCard(
         shape = MaterialTheme.shapes.medium,
     ) {
         Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.AltRoute, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(plan.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            if (showTitle) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.AltRoute, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(plan.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (onDetach != null) {
+                        TextButton(onClick = { onDetach(plan) }, modifier = Modifier.height(28.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Eigenes Fenster", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
             }
             val tileSize by TrackPlanUiState.tileSize.collectAsState()
-            val cell = tileSize.dp
+            val cell = cellSize ?: tileSize.dp
             Box(
-                (if (fill) Modifier.weight(1f).verticalScroll(rememberScrollState()) else Modifier).fillMaxWidth().padding(top = 8.dp),
+                (if (fill) Modifier.weight(1f).verticalScroll(rememberScrollState()) else Modifier).fillMaxWidth().padding(top = if (showTitle) 8.dp else 0.dp),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Box(Modifier.horizontalScroll(rememberScrollState())) {
