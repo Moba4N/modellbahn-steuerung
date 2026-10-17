@@ -3,7 +3,9 @@ package de.moba.desktop
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -37,7 +39,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** Burger-Menue "Aktionen": Aktion mit Bedingung und Befehl anlegen, im Betrieb ausloesen, ein- und ausschalten. */
@@ -66,7 +67,7 @@ class ActionsUiTest {
     fun newActionIsBuiltInTheEditorAndFires() = runComposeUiTest {
         val app = app()
         setContent { MobaShell(app, listOf(DrivingScreen), menus = listOf(ActionsMenu)) }
-        onNodeWithText("Aktionen").performClick()
+        onNode(hasText("Aktionen") and hasClickAction()).performClick()
         onNodeWithText("Noch keine Aktion.").assertExists()
         onNodeWithText("Neue Aktion …").performClick()
 
@@ -106,9 +107,8 @@ class ActionsUiTest {
         onNodeWithText("Signal stellen").assertExists()
         onNodeWithText("Aktionen (1 von 1 aktiv)").assertExists()
         // Ausschalten ueber den Schalter, dann von Hand starten
-        onAllNodes(isToggleable())[0].performClick()
-        waitForIdle()
-        assertFalse(app.actions().book.value.rules.single().enabled)
+        onNodeWithTag("aktion-an-ak-1").performClick()
+        waitUntil(timeoutMillis = 5000) { !app.actions().book.value.rules.single().enabled }
         runBlocking { app.sim().setTurnout(9, false) }
         onNode(hasContentDescription("„Signal stellen“ ausführen")).performClick()
         waitUntil(timeoutMillis = 5000) { app.sim().turnout(9) }

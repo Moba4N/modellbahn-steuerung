@@ -27,6 +27,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.moba.modules.actions.api.ACTIONS_MODULE_ID
@@ -93,7 +94,7 @@ object ActionsMenu : ModuleMenu {
                 },
                 trailingIcon = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(rule.enabled, { service.setEnabled(rule.id, it) }, Modifier.padding(start = 8.dp))
+                        Switch(rule.enabled, { service.setEnabled(rule.id, it) }, Modifier.padding(start = 8.dp).testTag("aktion-an-${rule.id}"))
                         IconButton(onClick = { runCatching { service.run(rule.id) } }, enabled = service.canRun) {
                             Icon(Icons.Filled.PlayArrow, "„${rule.name}“ ausführen")
                         }
