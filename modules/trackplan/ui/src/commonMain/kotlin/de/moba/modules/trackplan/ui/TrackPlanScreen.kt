@@ -80,6 +80,8 @@ import de.moba.modules.trackplan.api.TRACKPLAN_MODULE_ID
 import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
+import de.moba.modules.trackplan.api.block
+import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.TrackShape
 import de.moba.modules.trackplan.api.TrackTile
 import de.moba.modules.symbols.api.SymbolService
@@ -125,6 +127,9 @@ object TrackPlanUiState {
 
     /** Offener Reiter der Zubehoer-Eigenschaften (Allgemein, Decoder, Steuerung ...). */
     val accessoryTab = MutableStateFlow(0)
+
+    /** Offenes Kontextmenue im Betrieb als (Gleisbild-Id, Zelle). */
+    val contextMenu = MutableStateFlow<Pair<String, Pair<Int, Int>>?>(null)
 
     /** Offene Steuerung einer Drehscheibe/Schiebebuehne im Betrieb als (Gleisbild-Id, Zelle). */
     val openTable = MutableStateFlow<Pair<String, Pair<Int, Int>>?>(null)
@@ -187,7 +192,10 @@ object TrackPlanScreen : ModuleScreen {
                     }
                 }
                 when (mode) {
-                    TrackPlanMode.BETRIEB -> OperationView(app, service)
+                    // Zuege lassen sich aus der Zugleiste und zwischen Bloecken ziehen
+                    TrackPlanMode.BETRIEB -> TrainDragLayer(service, Modifier.weight(1f).fillMaxWidth()) {
+                        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) { OperationView(app, service) }
+                    }
                     TrackPlanMode.BEARBEITEN -> EditorView(service)
                 }
             }
@@ -224,12 +232,15 @@ private fun TrackPlanService.change(planId: String, transform: (TrackPlan) -> Tr
 internal class PlanOperation(
     val state: TrackState,
     val onTap: (TrackPlan, Int, Int) -> Unit,
-    val menu: (TrackPlan) -> AspectOverlayData?,
+    /** Rechtsklick bzw. langes Druecken: Kontextmenue der Kachel. */
+    val onContext: (TrackPlan, Int, Int) -> Unit,
+    /** Offene Menues ueber dem Gleisbild (Signalbilder, Kontextmenue), bei Gleisgroesse [Dp]. */
+    val overlay: @Composable (TrackPlan, Dp) -> Unit,
 )
 
 /** Betrieb eines Gleisbilds; gleich im Hauptfenster und in eigenen Fenstern. */
 @Composable
-internal fun rememberPlanOperation(service: TrackPlanService): PlanOperation {
+internal fun rememberPlanOperation(app: MobaApp, service: TrackPlanService): PlanOperation {
     val turnouts by service.turnouts.collectAsState()
     val occupied by service.occupied.collectAsState()
     val scope = rememberCoroutineScope()
@@ -238,12 +249,22 @@ internal fun rememberPlanOperation(service: TrackPlanService): PlanOperation {
     val positions by service.tablePositions.collectAsState()
     val allPlans by service.plans.collectAsState()
     val moving by service.tablesMoving.collectAsState()
+    val trains by service.trains.collectAsState()
+    val reservations by service.reservations.collectAsState()
+    val layout by app.layout.layout.collectAsState()
+    val names = layout.locos.associate { it.address to it.name }
     val state = TrackState(
         turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, aspects, library) },
         aspects = aspects, tablePositions = positions, moving = moving,
+        trains = trains.mapValues { trainLabel(it.value, names) }, reserved = reservations.keys,
     )
     // Offenes Signalbild-Menue (Gleisbild-Id, Kachel), wie in iTrain per Klick aufs Signal
     var aspectMenu by remember { mutableStateOf<Pair<String, TrackTile>?>(null) }
+    val openContext by TrackPlanUiState.contextMenu.collectAsState()
+    val onContext = { plan: TrackPlan, x: Int, y: Int ->
+        aspectMenu = null
+        TrackPlanUiState.contextMenu.value = plan.objectAt(x, y)?.let { plan.id to (it.x to it.y) }
+    }
     val table by TrackPlanUiState.openTable.collectAsState()
     val onTap = { plan: TrackPlan, x: Int, y: Int ->
         plan.objectAt(x, y)?.takeIf { it.shape.hasAddress && (it.address != null || it.shape.kind == TileKind.SOUND) }?.let { tile ->
@@ -264,17 +285,26 @@ internal fun rememberPlanOperation(service: TrackPlanService): PlanOperation {
         if (tile == null) TrackPlanUiState.openTable.value = null
         else TableControlDialog(service, tile, onDismiss = { TrackPlanUiState.openTable.value = null })
     }
-    val menu = { plan: TrackPlan ->
+    val overlay: @Composable (TrackPlan, Dp) -> Unit = { plan, cell ->
         aspectMenu?.takeIf { it.first == plan.id }?.second?.let { tile ->
-            AspectOverlay(tile, aspects[tile.address], onPick = { i ->
-                aspectMenu = null
-                scope.launch {
-                    runCatching { service.setAspect(tile, i) }.onFailure { say("Schalten nicht möglich: ${it.message}") }
+            Box(Modifier.offset(cell * tile.x, cell * tile.y).size(cell)) {
+                AspectMenu(tile, aspects[tile.address], onPick = { i ->
+                    aspectMenu = null
+                    scope.launch {
+                        runCatching { service.setAspect(tile, i) }.onFailure { say("Schalten nicht möglich: ${it.message}") }
+                    }
+                }, onDismiss = { aspectMenu = null })
+            }
+        }
+        openContext?.takeIf { it.first == plan.id }?.let { (_, at) ->
+            plan.tileAt(at.first, at.second)?.let { tile ->
+                Box(Modifier.offset(cell * tile.x, cell * tile.y).size(cell)) {
+                    PlanContextMenu(app, service, ContextTarget(plan.id, tile), state, onDismiss = { TrackPlanUiState.contextMenu.value = null })
                 }
-            }, onDismiss = { aspectMenu = null })
+            }
         }
     }
-    return PlanOperation(state, onTap, menu)
+    return PlanOperation(state, onTap, onContext, overlay)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -282,7 +312,7 @@ internal fun rememberPlanOperation(service: TrackPlanService): PlanOperation {
 private fun ColumnScope.OperationView(app: MobaApp, service: TrackPlanService) {
     val plans by service.plans.collectAsState()
     val visible by service.visiblePlans.collectAsState()
-    val op = rememberPlanOperation(service)
+    val op = rememberPlanOperation(app, service)
     val wide = LocalWideLayout.current
     // Gleisbilder in eigenen Fenstern (Windows, Pro) fehlen hier und tragen ein Fenster-Zeichen
     val separate by ShellUiState.separateWindows.collectAsState()
@@ -336,6 +366,8 @@ private fun ColumnScope.OperationView(app: MobaApp, service: TrackPlanService) {
         }
     }
 
+    TrainStrip(app, service)
+
     val shown = visible.filter { !windowsAllowed || it !in detached }.mapNotNull { id -> plans.firstOrNull { it.id == id } }
     if (shown.isEmpty() && visible.isNotEmpty()) {
         Text(
@@ -349,7 +381,7 @@ private fun ColumnScope.OperationView(app: MobaApp, service: TrackPlanService) {
         null
     }
     val card = @Composable { plan: TrackPlan, modifier: Modifier, fill: Boolean ->
-        PlanCard(plan, op.state, modifier, fill = fill, onTap = op.onTap, menu = op.menu, onDetach = onDetach)
+        PlanCard(plan, op.state, modifier, fill = fill, onTap = op.onTap, onContext = op.onContext, overlay = op.overlay, onDetach = onDetach)
     }
     if (wide) {
         Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -383,7 +415,8 @@ internal fun PlanCard(
     modifier: Modifier,
     fill: Boolean,
     onTap: (TrackPlan, Int, Int) -> Unit,
-    menu: (TrackPlan) -> AspectOverlayData? = { null },
+    onContext: ((TrackPlan, Int, Int) -> Unit)? = null,
+    overlay: @Composable (TrackPlan, Dp) -> Unit = { _, _ -> },
     /** Zeigt im Kopf "In eigenem Fenster"; `null` = geht hier nicht. */
     onDetach: ((TrackPlan) -> Unit)? = null,
     /** Feste Gleisgroesse, z. B. eingepasst ins eigene Fenster; sonst die eingestellte. */
@@ -418,12 +451,12 @@ internal fun PlanCard(
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Box(Modifier.horizontalScroll(rememberScrollState())) {
-                    TrackPlanView(plan, cell, state, onTap = { x, y -> onTap(plan, x, y) })
-                    menu(plan)?.let { m ->
-                        Box(Modifier.offset(cell * m.tile.x, cell * m.tile.y).size(cell)) {
-                            AspectMenu(m.tile, m.current, m.onPick, m.onDismiss)
-                        }
-                    }
+                    TrackPlanView(
+                        plan, cell, state, Modifier.testTag(PLAN_VIEW_TAG + plan.id),
+                        onContext = onContext?.let { f -> { x, y -> f(plan, x, y) } },
+                        onTap = { x, y -> onTap(plan, x, y) },
+                    )
+                    overlay(plan, cell)
                 }
             }
         }
@@ -769,6 +802,9 @@ private fun ToolButton(label: String, icon: ImageVector, showLabel: Boolean, ena
 /** Kacheln, bei denen die Drehung nichts aendert. */
 private val UNROTATED = setOf(TileKind.TEXT, TileKind.SYMBOL, TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.ASPECT, TileKind.TURNTABLE)
 
+/** Kennung eines Gleisbilds im Betrieb fuer Oberflaechentests, gefolgt von der Gleisbild-Id. */
+const val PLAN_VIEW_TAG = "gleisbild-betrieb-"
+
 /** Kennung des Editor-Rasters fuer Oberflaechentests. */
 const val EDITOR_GRID_TAG = "gleisbild-raster"
 
@@ -882,6 +918,14 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                     NumberField("Kontakt (1–16)", tile.feedbackContact?.toString().orEmpty(), Modifier.width(140.dp)) {
                         set(tile.copy(feedbackContact = it.toIntOrNull()))
                     }
+                    OutlinedTextField(
+                        value = tile.prop(AccessoryProps.NAME),
+                        onValueChange = { set(tile.withProp(AccessoryProps.NAME, it.take(40))) },
+                        label = { Text("Blockname") },
+                        placeholder = { Text(tile.block()?.let { (m, c) -> "Block $m.$c" } ?: "Block") },
+                        singleLine = true,
+                        modifier = Modifier.width(220.dp),
+                    )
                 }
                 if (tile.shape == TrackShape.TEXT) {
                     OutlinedTextField(
@@ -912,9 +956,3 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
         }
     }
 }
-
-/** Offenes Signalbild-Menue an einer Signalkachel im Betrieb. */
-internal class AspectOverlayData(val tile: TrackTile, val current: Int?, val onPick: (Int) -> Unit, val onDismiss: () -> Unit)
-
-private fun AspectOverlay(tile: TrackTile, current: Int?, onPick: (Int) -> Unit, onDismiss: () -> Unit) =
-    AspectOverlayData(tile, current, onPick, onDismiss)

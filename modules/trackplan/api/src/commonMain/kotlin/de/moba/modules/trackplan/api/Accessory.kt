@@ -179,3 +179,16 @@ fun TrackTile.isOn(turnouts: Map<Int, Boolean>): Boolean {
 /** Impulsdauer aus dem Reiter Steuerung; beim Entkuppler 500 ms als Vorgabe. */
 fun TrackTile.pulseMillis(): Long? = prop(AccessoryProps.PULSE).toLongOrNull()?.takeIf { it > 0 }?.coerceAtMost(60_000)
     ?: if (shape.kind == TileKind.UNCOUPLER) 500L else null
+
+/** Der Block einer Rueckmelder-Kachel: ihr s88-Melder. Andere Kacheln sind keine Bloecke. */
+fun TrackTile.block(): FeedbackRef? {
+    if (shape.kind != TileKind.FEEDBACK) return null
+    val m = feedbackModule ?: return null
+    val c = feedbackContact ?: return null
+    return m to c
+}
+
+/** Name eines Blocks: aus dem Gleisbild (Blockname am Rueckmelder), sonst "Block 1.3". */
+fun List<TrackPlan>.blockName(block: FeedbackRef): String =
+    asSequence().flatMap { it.tiles }.firstOrNull { it.block() == block }?.prop(AccessoryProps.NAME)?.takeIf { it.isNotBlank() }
+        ?: "Block ${block.first}.${block.second}"

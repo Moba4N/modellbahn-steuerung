@@ -1,7 +1,11 @@
 package de.moba.modules.trackplan.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -19,7 +23,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -30,7 +39,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.Branch
+import de.moba.modules.trackplan.api.FeedbackRef
 import de.moba.modules.trackplan.api.Footprint
+import de.moba.modules.trackplan.api.block
 import de.moba.modules.trackplan.api.TableConfig
 import de.moba.modules.trackplan.api.aspectNames
 import de.moba.modules.trackplan.api.isOn
@@ -63,6 +74,9 @@ internal class TrackColors(
     val selection: Color,
     val background: Color,
     val text: Color,
+    val reserved: Color,
+    val train: Color,
+    val onTrain: Color,
 )
 
 @Composable
@@ -81,6 +95,9 @@ internal fun trackColors(): TrackColors {
         selection = scheme.primary,
         background = scheme.surfaceContainerLowest,
         text = scheme.onSurfaceVariant,
+        reserved = moba.signalGreen.copy(alpha = 0.32f),
+        train = scheme.primary,
+        onTrain = scheme.onPrimary,
     )
 }
 
@@ -98,6 +115,10 @@ internal class TrackState(
     val tablePositions: Map<Int, Int> = emptyMap(),
     /** Buehnen, die gerade drehen bzw. fahren. */
     val moving: Set<Int> = emptySet(),
+    /** Zuege in Bloecken: Block zu Beschriftung (Lokname). */
+    val trains: Map<FeedbackRef, String> = emptyMap(),
+    /** Reservierte Bloecke. */
+    val reserved: Set<FeedbackRef> = emptySet(),
 )
 
 /**
@@ -112,22 +133,67 @@ internal fun TrackPlanView(
     modifier: Modifier = Modifier,
     selected: Pair<Int, Int>? = null,
     showGrid: Boolean = false,
+    /** Kontextmenue: Rechtsklick (Windows) oder langes Druecken (Android); `null` = keins. */
+    onContext: ((x: Int, y: Int) -> Unit)? = null,
     onTap: (x: Int, y: Int) -> Unit = { _, _ -> },
 ) {
     val colors = trackColors()
     val measurer = rememberTextMeasurer()
     val cellPx = with(LocalDensity.current) { cell.toPx() }
     val tap by rememberUpdatedState(onTap)
+    val context by rememberUpdatedState(onContext)
+    val current by rememberUpdatedState(plan)
+    val currentState by rememberUpdatedState(state)
+    // Zuege mit der Maus bzw. dem Finger von Block zu Block ziehen (nur im Betrieb)
+    val layer = LocalDragLayer.current?.takeIf { state.operating }
+    fun cellOf(o: Offset): Pair<Int, Int>? {
+        val x = (o.x / cellPx).toInt()
+        val y = (o.y / cellPx).toInt()
+        return if (o.x >= 0 && o.y >= 0 && x in 0 until current.width && y in 0 until current.height) x to y else null
+    }
     Canvas(
         modifier
             .size(cell * plan.width, cell * plan.height)
+            .then(if (layer != null) Modifier.onGloballyPositioned { layer.register(plan.id, it.positionInWindow(), cellPx) { current } } else Modifier)
             .pointerInput(plan.width, plan.height, cellPx) {
-                detectTapGestures { o ->
-                    val x = (o.x / cellPx).toInt()
-                    val y = (o.y / cellPx).toInt()
-                    if (x in 0 until plan.width && y in 0 until plan.height) tap(x, y)
+                detectTapGestures(
+                    onLongPress = { o -> cellOf(o)?.let { (x, y) -> context?.invoke(x, y) } },
+                    onTap = { o -> cellOf(o)?.let { (x, y) -> tap(x, y) } },
+                )
+            }
+            .pointerInput(cellPx) {
+                // Rechtsklick vor allen anderen Gesten abfangen
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                            val handler = context ?: continue
+                            val change = event.changes.first()
+                            cellOf(change.position)?.let { (x, y) -> handler(x, y) }
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
                 }
-            },
+            }
+            .then(
+                if (layer == null) Modifier else Modifier.pointerInput(layer, cellPx) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (down.isConsumed) return@awaitEachGesture
+                        val (x, y) = cellOf(down.position) ?: return@awaitEachGesture
+                        val block = current.objectAt(x, y)?.block() ?: return@awaitEachGesture
+                        val label = currentState.trains[block] ?: return@awaitEachGesture
+                        val start = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
+                        val origin = layer.originOf(current.id)
+                        layer.start(TrainDragItem(layer.addressIn(block) ?: return@awaitEachGesture, label, block), origin + start.position)
+                        val done = drag(start.id) { change ->
+                            layer.moveTo(origin + change.position)
+                            change.consume()
+                        }
+                        if (done) layer.drop() else layer.cancel()
+                    }
+                },
+            ),
     ) {
         if (showGrid) {
             val r = (cellPx * 0.04f).coerceAtLeast(1f)
@@ -137,6 +203,13 @@ internal fun TrackPlanView(
         }
         // Drehscheiben und Schiebebuehnen zuerst, die anschliessenden Gleise liegen darueber
         for (tile in plan.tiles.sortedByDescending { it.shape.isTable }) drawTile(tile, tile.x * cellPx, tile.y * cellPx, cellPx, colors, state, measurer)
+        // Zugnamen obenauf, damit sie ueber Nachbarkacheln reichen duerfen
+        if (state.trains.isNotEmpty()) {
+            for (tile in plan.tiles) {
+                val label = tile.block()?.let { state.trains[it] } ?: continue
+                drawTrainLabel(label, Offset((tile.x + 0.5f) * cellPx, (tile.y + 0.5f) * cellPx), cellPx, colors, measurer)
+            }
+        }
         selected?.let { (sx, sy) ->
             val area = plan.tileAt(sx, sy)?.footprint() ?: Footprint(sx, sy, 1, 1)
             drawRoundRect(
@@ -228,6 +301,10 @@ internal fun DrawScope.drawTile(
         tile.activeBranch(state.turnouts) ?: Branch.MAIN
     } else {
         null
+    }
+    if (kind == TileKind.FEEDBACK && tile.block()?.let { it in state.reserved } == true) {
+        // Reservierter Block: farbig unterlegt wie in iTrain
+        drawRoundRect(colors.reserved, Offset(left + cell * 0.04f, top + cell * 0.04f), Size(cell * 0.92f, cell * 0.92f), CornerRadius(cell * 0.18f))
     }
     val closed = kind == TileKind.GATE && state.operating && tile.isOn(state.turnouts)
     if (kind == TileKind.GATE) {
@@ -503,4 +580,16 @@ private fun DrawScope.drawTransferTable(tile: TrackTile, left: Float, top: Float
     val start = center(position ?: config.tracks.first())
     drawLine(bridge.copy(alpha = 0.35f), start + along * inset, start + along * (length - inset), strokeWidth = cell * 0.62f)
     drawLine(bridge, start + along * inset, start + along * (length - inset), strokeWidth = width)
+}
+
+/** Zugname als Schild ueber dem Block. */
+internal fun DrawScope.drawTrainLabel(label: String, center: Offset, cell: Float, colors: TrackColors, measurer: TextMeasurer) {
+    val style = TextStyle(color = colors.onTrain, fontSize = (cell * 0.36f).coerceAtLeast(9f * density).toSp(), fontWeight = FontWeight.SemiBold)
+    val layout = measurer.measure(label, style, maxLines = 1)
+    val padX = cell * 0.18f
+    val w = layout.size.width + 2 * padX
+    val h = layout.size.height + cell * 0.08f
+    val topLeft = Offset(center.x - w / 2, center.y - h / 2)
+    drawRoundRect(colors.train, topLeft, Size(w, h), CornerRadius(h / 2))
+    drawText(layout, topLeft = Offset(center.x - layout.size.width / 2f, center.y - layout.size.height / 2f))
 }

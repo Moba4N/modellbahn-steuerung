@@ -51,6 +51,9 @@ interface TrackPlanService {
     /** Schaltet die Weiche oder das Signal einer Kachel in die naechste Stellung. */
     suspend fun operate(tile: TrackTile)
 
+    /** Stellt eine Weiche oder einen Ausgang direkt (true = abzweigend/rot), z. B. aus dem Kontextmenue. */
+    suspend fun setTurnout(address: Int, thrown: Boolean)
+
     /** Stellt ein Signal oder ein Zubehoer mit Bildern auf ein bestimmtes Bild, Adressen nach [SignalAddressing]. */
     suspend fun setAspect(tile: TrackTile, aspect: Int)
 
@@ -77,7 +80,41 @@ interface TrackPlanService {
 
     /** Befehl aus dem Reiter Steuern: um 180 Grad drehen oder einen Schritt weiter. */
     suspend fun tableCommand(tile: TrackTile, command: TableCommand)
+
+    // ---------------------------------------------------------- Bloecke und Zuege (wie in iTrain)
+
+    /** Welcher Zug (Lokadresse) in welchem Block steht. Ein Block ist ein Rueckmelder, siehe [TrackTile.block]. */
+    val trains: StateFlow<Map<FeedbackRef, Int>>
+
+    /** Reservierte Bloecke, z. B. von einer gestellten Fahrstrasse. */
+    val reservations: StateFlow<Map<FeedbackRef, BlockReservation>>
+
+    /** Setzt einen Zug in einen Block; steht er schon woanders, wechselt er hierher. @throws BlockException, wenn dort ein anderer Zug steht */
+    fun placeTrain(block: FeedbackRef, address: Int)
+
+    /** Nimmt den Zug aus dem Block (die Lok bleibt, wo sie ist, das Gleisbild vergisst sie nur). */
+    fun removeTrain(block: FeedbackRef)
+
+    /** Verschiebt den Zug von [from] nach [to]. @throws BlockException, wenn in [to] ein anderer Zug steht */
+    fun moveTrain(from: FeedbackRef, to: FeedbackRef)
+
+    /** Reserviert alle [blocks] auf einmal oder keinen. @throws BlockException, wenn einer schon anders reserviert ist */
+    fun reserve(blocks: Collection<FeedbackRef>, reservation: BlockReservation)
+
+    /** Gibt einen Block frei. */
+    fun release(block: FeedbackRef)
+
+    /** Gibt alle Bloecke frei, die [owner] reserviert hat, z. B. beim Aufloesen einer Fahrstrasse. */
+    fun releaseOwner(owner: String)
+
+    /** Gibt alle Bloecke frei. */
+    fun releaseAll()
 }
+
+/** Wer einen Block reserviert hat: [owner] als Kennung (z. B. "fs:<id>"), [label] fuer die Anzeige. */
+data class BlockReservation(val owner: String, val label: String)
+
+class BlockException(message: String) : Exception(message)
 
 enum class TableCommand(val label: String) {
     TURN_180("180° drehen"),

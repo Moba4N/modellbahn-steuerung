@@ -19,6 +19,10 @@ import de.moba.modules.routes.api.RouteStore
 import de.moba.modules.routes.api.Shuttle
 import de.moba.modules.routes.api.TrainRoute
 import de.moba.modules.routes.api.TrainRouteStep
+import de.moba.modules.trackplan.TrackPlanModule
+import de.moba.modules.trackplan.TrackPlanRepository
+import de.moba.modules.trackplan.api.BlockReservation
+import de.moba.modules.trackplan.api.TrackPlanService
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -238,5 +242,31 @@ class RouteModuleTest {
         assertEquals(0, StopTiming(LocoDynamics(feedbackOffsetMm = 100), null).delayMillis())
         assertEquals(0, StopTiming(LocoDynamics(feedbackOffsetMm = 100, reactionDelayMs = 3000), 400.0).delayMillis())
         assertEquals(250, StopTiming(LocoDynamics(feedbackOffsetMm = 100), 400.0).delayMillis())
+    }
+
+    @Test
+    fun routeReservesBlocksAndTakesTheTrainAlong() = runTest {
+        val sim = SimulatorStation()
+        val host = ModuleHost(sim, InMemoryLayoutRepository(), LicenseInfo.of("basis"), backgroundScope)
+        host.register(TrackPlanModule(TrackPlanRepository(null)))
+        host.register(RouteModule(RouteRepository(MemoryStore())))
+        sim.connect()
+        host.startAll()
+        val routes = host.service(RouteService::class)!!
+        val plans = host.service(TrackPlanService::class)!!
+        listOf(west, east).forEach(routes::saveRoute)
+        plans.placeTrain(1 to 1, 3)
+
+        routes.setRoute("fs-1")
+        runCurrent()
+        assertEquals(setOf(1 to 1, 1 to 2), plans.reservations.value.keys)
+        // Ein Block der Fahrstrasse ist schon anders reserviert: Konflikt
+        plans.reserve(listOf(1 to 3), BlockReservation("hand", "von Hand"))
+        assertFailsWith<RouteConflictException> { routes.setRoute("fs-2") }
+        assertFalse("fs-2" in routes.activeRoutes.value)
+
+        hit(sim, Feedback(1, 2))
+        assertEquals(mapOf((1 to 2) to 3), plans.trains.value)
+        assertEquals(setOf(1 to 3), plans.reservations.value.keys, "Fahrstraße hat ihre Blöcke freigegeben")
     }
 }

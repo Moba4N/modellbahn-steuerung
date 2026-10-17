@@ -16,6 +16,7 @@ import de.moba.modules.driving.ui.DrivingPanel
 import de.moba.modules.driving.ui.DrivingScreen
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanSounds
+import de.moba.modules.trackplan.ui.TrackPlanTrains
 import de.moba.modules.symbols.ui.SymbolsScreen
 import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.modules.calibration.ui.CalibrationScreen
@@ -81,7 +82,7 @@ class MainActivity : ComponentActivity() {
                 exitGuard = exitGuard,
                 onExit = ::finish,
                 sound = sound,
-                effects = listOf(TrackPlanSounds),
+                effects = listOf(TrackPlanSounds, TrackPlanTrains),
             )
         }
     }

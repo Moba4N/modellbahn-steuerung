@@ -172,6 +172,20 @@ Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
 
+### Bloecke, Zuege und Kontextmenue
+
+Jeder Rueckmelder mit s88-Modul und Kontakt ist ein Block; im Editor laesst sich ein Blockname eintragen.
+Im Betrieb steht ueber dem Gleisbild die Zugleiste mit allen Loks. Eine Lok aus der Leiste auf einen Block ziehen
+setzt sie dort ein; ein Zug im Gleisbild laesst sich auf einen anderen Block ziehen. Sein Name steht als Schild
+ueber dem Block. Welche Zuege wo stehen, merkt sich die App ueber Neustarts.
+Eine gestellte Fahrstrasse reserviert Start, Ziel und alle Rueckmelder auf ihrem Weg (gruen unterlegt); ist einer
+schon anders reserviert, laesst sie sich nicht stellen. Erreicht der Zug das Ziel, wandert er in den Zielblock und
+die Fahrstrasse gibt ihre Bloecke frei. Pendelzuege und Zugrouten nehmen eingesetzte Zuege an jedem Halt mit.
+Rechtsklick (Windows) oder langes Druecken (Android) oeffnet ein Kontextmenue passend zur Kachel: bei Bloecken
+Zug einsetzen, Zug entfernen und Block freigeben, bei Weichen die Stellungen, bei Signalen und Zubehoer mit Bildern
+alle Bilder, bei schaltbarem Zubehoer ein/aus, bei Drehscheiben die Steuerung. "Alle Bloecke freigeben" steht
+in jedem Kontextmenue, solange etwas reserviert ist.
+
 ### Zubehoer wie in iTrain
 
 Weitere Formen in der Leiste "Gleisformen": Zubehoer mit Bildern (Aspekt), Relais, Licht, Sound, Bahnuebergang,

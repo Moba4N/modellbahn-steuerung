@@ -20,6 +20,10 @@ import de.moba.modules.trackplan.api.TrackShape
 import de.moba.modules.trackplan.api.TrackTile
 import de.moba.modules.trackplan.api.activeBranch
 import de.moba.modules.trackplan.api.AccessoryProps
+import de.moba.modules.trackplan.api.BlockException
+import de.moba.modules.trackplan.api.BlockReservation
+import de.moba.modules.trackplan.api.FeedbackRef
+import de.moba.modules.trackplan.api.blockName
 import de.moba.modules.trackplan.api.FeedbackList
 import de.moba.modules.trackplan.api.TableCommand
 import de.moba.modules.trackplan.api.TableConfig
@@ -47,6 +51,9 @@ class TrackPlanRepository(private val store: TrackPlanStore?) {
     )
     internal val unsaved = MutableStateFlow(false)
     internal val visible = MutableStateFlow(listOf(plans.value.first().id))
+
+    /** Zuege in Bloecken; bleiben bei einem Zentralenwechsel erhalten. */
+    internal val trains = MutableStateFlow<Map<FeedbackRef, Int>>(emptyMap())
     private var nextNumber = plans.value.size + 1
 
     internal fun newId(): String {
@@ -201,6 +208,8 @@ internal class TrackPlanServiceImpl(
         }
     }
 
+    override suspend fun setTurnout(address: Int, thrown: Boolean) = station.setTurnout(address, thrown)
+
     override suspend fun setOn(tile: TrackTile, on: Boolean) {
         if (on && tile.shape.kind == TileKind.SOUND) tile.prop(AccessoryProps.FILE).takeIf { it.isNotEmpty() }?.let { _sounds.tryEmit(it) }
         val address = tile.address ?: return
@@ -311,6 +320,52 @@ internal class TrackPlanServiceImpl(
             .filter { it <= address && address - it < SignalAddressing.MAX_ASPECTS / 2 }
             .maxOrNull() ?: return
         _aspects.update { it + (base to SignalAddressing.aspect(base, address, thrown)) }
+    }
+
+    // ------------------------------------------------------------ Bloecke und Zuege
+
+    override val trains: StateFlow<Map<FeedbackRef, Int>> = repository.trains
+
+    private val _reservations = MutableStateFlow<Map<FeedbackRef, BlockReservation>>(emptyMap())
+    override val reservations: StateFlow<Map<FeedbackRef, BlockReservation>> = _reservations
+
+    private fun name(block: FeedbackRef) = plans.value.blockName(block)
+
+    override fun placeTrain(block: FeedbackRef, address: Int) {
+        repository.trains.update { current ->
+            val there = current[block]
+            if (there != null && there != address) throw BlockException("In ${name(block)} steht schon Lok $there.")
+            current.filterValues { it != address } + (block to address)
+        }
+    }
+
+    override fun removeTrain(block: FeedbackRef) = repository.trains.update { it - block }
+
+    override fun moveTrain(from: FeedbackRef, to: FeedbackRef) {
+        if (from == to) return
+        repository.trains.update { current ->
+            val address = current[from] ?: return@update current
+            val there = current[to]
+            if (there != null) throw BlockException("In ${name(to)} steht schon Lok $there.")
+            current - from + (to to address)
+        }
+    }
+
+    override fun reserve(blocks: Collection<FeedbackRef>, reservation: BlockReservation) {
+        _reservations.update { current ->
+            blocks.firstOrNull { b -> current[b]?.let { it.owner != reservation.owner } == true }?.let { b ->
+                throw BlockException("${name(b)} ist reserviert für ${current.getValue(b).label}.")
+            }
+            current + blocks.associateWith { reservation }
+        }
+    }
+
+    override fun release(block: FeedbackRef) = _reservations.update { it - block }
+
+    override fun releaseOwner(owner: String) = _reservations.update { current -> current.filterValues { it.owner != owner } }
+
+    override fun releaseAll() {
+        _reservations.value = emptyMap()
     }
 
     fun onFeedback(module: Int, contact: Int, occupied: Boolean) {

@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import de.moba.modules.trackplan.api.AccessoryCommand
 import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.FeedbackList
+import de.moba.modules.trackplan.api.FeedbackRef
 import de.moba.modules.trackplan.api.SignalAddressing
 import de.moba.modules.trackplan.api.TRACKPLAN_MODULE_ID
 import de.moba.modules.trackplan.api.TableCommand
@@ -456,6 +457,36 @@ object TrackPlanSounds : ModuleEffect {
         val sound = LocalSoundSupport.current ?: return
         LaunchedEffect(service, sound) {
             service.sounds.collect { sound.play(it) }
+        }
+    }
+}
+
+/**
+ * Merkt sich, welcher Zug in welchem Block steht, ueber Neustarts hinweg (Einstellung "gleisbild.zuege",
+ * z. B. "1.3=12;2.5=7"). Beim Start setzt es die gemerkten Zuege wieder ein.
+ */
+object TrackPlanTrains : ModuleEffect {
+    override val moduleId = TRACKPLAN_MODULE_ID
+    private const val PREF = "gleisbild.zuege"
+
+    fun encode(trains: Map<FeedbackRef, Int>) =
+        trains.entries.sortedBy { "${it.key.first}.${it.key.second}" }.joinToString(";") { "${it.key.first}.${it.key.second}=${it.value}" }
+
+    fun decode(text: String?): Map<FeedbackRef, Int> = text.orEmpty().split(';').mapNotNull { part ->
+        val (block, address) = part.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
+        val ref = FeedbackList.parse(block).singleOrNull() ?: return@mapNotNull null
+        ref to (address.trim().toIntOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null)
+    }.toMap()
+
+    @Composable
+    override fun Run(app: MobaApp) {
+        val session by app.session.collectAsState()
+        val service = session?.host?.service(TrackPlanService::class) ?: return
+        LaunchedEffect(service) {
+            if (service.trains.value.isEmpty()) {
+                decode(app.preference(PREF)).forEach { (block, address) -> runCatching { service.placeTrain(block, address) } }
+            }
+            service.trains.collect { app.setPreference(PREF, encode(it)) }
         }
     }
 }

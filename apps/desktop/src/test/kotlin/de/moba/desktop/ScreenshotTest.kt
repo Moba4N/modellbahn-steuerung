@@ -49,6 +49,7 @@ import de.moba.modules.trackplan.DemoPlans
 import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.trackplan.api.AccessoryProps
+import de.moba.modules.trackplan.api.BlockReservation
 import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
 import de.moba.modules.trackplan.api.TrackPlanStore
@@ -689,6 +690,36 @@ class ScreenshotTest {
         }
         TrackPlanWindows.reset()
         ShellUiState.separateWindows.value = false
+
+        // Bloecke wie in iTrain: Zuege in Bloecken, eine reservierte Fahrstrasse, Kontextmenue
+        pro.setDarkTheme(true)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        proPlansService.placeTrain(1 to 3, 3)
+        proPlansService.placeTrain(2 to 5, 12)
+        proPlansService.reserve(listOf(1 to 4), BlockReservation("fs:demo", "Fahrstraße „Einfahrt Gleis 1“"))
+        delay(100)
+        render("pc-gleisbild-bloecke-zuege-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.contextMenu.value = "beispiel" to (12 to 8)
+        render("pc-gleisbild-kontextmenue-block-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.contextMenu.value = "beispiel" to (6 to 8)
+        render("pc-gleisbild-kontextmenue-weiche-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        pro.setDarkTheme(false)
+        TrackPlanUiState.contextMenu.value = "beispiel" to (9 to 2)
+        render("handy-gleisbild-kontextmenue-block-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.contextMenu.value = null
+        render("handy-gleisbild-bloecke-zuege-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        proPlansService.releaseAll()
+        proPlansService.trains.value.keys.forEach(proPlansService::removeTrain)
 
         // Zubehoer wie in iTrain: Drehscheibe, Schiebebuehne, Bahnuebergang, Relais, Licht, Sound, Zubehoer mit Bildern
         pro.setDarkTheme(true)

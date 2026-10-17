@@ -6,6 +6,7 @@ import de.moba.core.runtime.ModuleContext
 import de.moba.core.runtime.SemVer
 import de.moba.core.runtime.on
 import de.moba.core.runtime.provide
+import de.moba.core.runtime.service
 import de.moba.core.station.CommandStation
 import de.moba.core.station.Direction
 import de.moba.core.station.StationEvent
@@ -29,6 +30,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import de.moba.modules.trackplan.api.BlockException
+import de.moba.modules.trackplan.api.BlockReservation
+import de.moba.modules.trackplan.api.FeedbackRef
+import de.moba.modules.trackplan.api.TrackPlanService
+import de.moba.modules.trackplan.api.block
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -60,9 +66,12 @@ class RouteModule(private val repository: RouteRepository) : MobaModule {
     private var service: RouteServiceImpl? = null
 
     override suspend fun start(ctx: ModuleContext) {
-        val impl = RouteServiceImpl(repository, ctx.station, ctx.license, ctx.scope) { address, speed ->
-            stopTiming(ctx, address, speed)
-        }
+        val impl = RouteServiceImpl(
+            repository, ctx.station, ctx.license, ctx.scope,
+            stopTiming = { address, speed -> stopTiming(ctx, address, speed) },
+            // Das Gleisbild ist freiwillig; ohne es gibt es keine Blockreservierung
+            blocks = { ctx.service<TrackPlanService>() },
+        )
         ctx.events.on<StationEvent.FeedbackChanged>(ctx.scope) { if (it.occupied) impl.onOccupied(Feedback(it.module, it.contact)) }
         ctx.provide<RouteService>(impl)
         service = impl
@@ -91,6 +100,8 @@ internal class RouteServiceImpl(
     private val scope: CoroutineScope,
     /** Rueckmelde-Offset und Reaktionsverzoegerung der Lok bei dieser Fahrstufe; `null` = sofort halten. */
     private val stopTiming: (address: Int, speed: Int) -> StopTiming? = { _, _ -> null },
+    /** Bloecke und Zuege im Gleisbild: Fahrstrassen reservieren ihre Bloecke, Zuege wandern mit. */
+    private val blocks: () -> TrackPlanService? = { null },
 ) : RouteService {
     override val book: StateFlow<RouteBook> = repository.book
 
@@ -119,10 +130,28 @@ internal class RouteServiceImpl(
     /** Am Haltemelder halten: erst noch den Rueckmelde-Offset weiterfahren, abzueglich der Reaktionsverzoegerung. */
     private suspend fun stopAt(feedback: Feedback, address: Int, speed: Int, direction: Direction) {
         waitFor(feedback)
+        follow(address, feedback)
         val wait = stopTiming(address, speed)?.delayMillis() ?: 0L
         if (wait > 0) delay(wait)
         station.setLocoSpeed(address, 0, direction)
     }
+
+    /** Steht die Lok in einem Block des Gleisbilds, wandert sie in den Block von [feedback] mit. */
+    private fun follow(address: Int, feedback: Feedback) {
+        val plans = blocks() ?: return
+        val from = plans.trains.value.entries.firstOrNull { it.value == address }?.key ?: return
+        runCatching { plans.moveTrain(from, feedback.module to feedback.contact) }
+    }
+
+    /** Bloecke einer Fahrstrasse: Start, Ziel und alle Rueckmelder auf ihrem Weg im Gleisbild. */
+    private fun routeBlocks(route: Route, plans: TrackPlanService): Set<FeedbackRef> {
+        val onPath = plans.plans.value.firstOrNull { it.id == route.planId }?.let { plan ->
+            route.path.mapNotNull { (x, y) -> plan.tileAt(x, y)?.block() }
+        }.orEmpty()
+        return (listOfNotNull(route.start, route.end).map { it.module to it.contact } + onPath).toSet()
+    }
+
+    private fun owner(id: String) = "fs:$id"
 
     // ------------------------------------------------------------ Bearbeiten
 
@@ -180,6 +209,13 @@ internal class RouteServiceImpl(
             val blocking = _active.value.mapNotNull { other -> book.value.routes.firstOrNull { it.id == other } }
                 .firstOrNull { other -> other.settings.any { it.address in addresses } }
             if (blocking != null) throw RouteConflictException("„${route.name}“ kreuzt die gestellte Fahrstraße „${blocking.name}“.")
+            blocks()?.let { plans ->
+                try {
+                    plans.reserve(routeBlocks(route, plans), BlockReservation(owner(id), "Fahrstraße „${route.name}“"))
+                } catch (e: BlockException) {
+                    throw RouteConflictException(e.message ?: "Block reserviert")
+                }
+            }
             _active.update { it + id }
         }
         try {
@@ -196,6 +232,12 @@ internal class RouteServiceImpl(
             watchers[id]?.cancel()
             watchers[id] = scope.launch {
                 waitFor(end)
+                // Der Zug aus dem Startblock ist jetzt im Zielblock
+                val plans = blocks()
+                val start = route.start
+                if (plans != null && start != null) {
+                    runCatching { plans.moveTrain(start.module to start.contact, end.module to end.contact) }
+                }
                 releaseRoute(id)
             }
         }
@@ -204,6 +246,7 @@ internal class RouteServiceImpl(
     override fun releaseRoute(id: String) {
         watchers.remove(id)?.cancel()
         _active.update { it - id }
+        blocks()?.releaseOwner(owner(id))
     }
 
     // ------------------------------------------------------------ Automatik

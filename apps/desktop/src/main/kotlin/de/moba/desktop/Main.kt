@@ -21,6 +21,7 @@ import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.trackplan.ui.TrackPlanScreen
 import de.moba.modules.trackplan.ui.TrackPlanSounds
+import de.moba.modules.trackplan.ui.TrackPlanTrains
 import de.moba.modules.trackplan.ui.TrackPlanWindows
 import de.moba.modules.symbols.FileSymbolStore
 import de.moba.modules.symbols.SymbolModule
@@ -176,7 +177,7 @@ fun main() = application {
             onExit = ::exitApplication,
             separateWindows = true,
             sound = sound,
-            effects = listOf(TrackPlanSounds),
+            effects = listOf(TrackPlanSounds, TrackPlanTrains),
         )
     }
     // Gleisbilder in eigenen Fenstern (Pro), z. B. auf einem zweiten und dritten Bildschirm

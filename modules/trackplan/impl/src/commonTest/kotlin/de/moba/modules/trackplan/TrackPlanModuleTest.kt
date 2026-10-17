@@ -5,6 +5,8 @@ import de.moba.core.model.InMemoryLayoutRepository
 import de.moba.core.runtime.LicenseInfo
 import de.moba.core.runtime.ModuleHost
 import de.moba.modules.trackplan.api.AccessoryProps
+import de.moba.modules.trackplan.api.BlockException
+import de.moba.modules.trackplan.api.BlockReservation
 import de.moba.modules.trackplan.api.LicenseRequiredException
 import de.moba.modules.trackplan.api.TableCommand
 import de.moba.modules.trackplan.api.isOn
@@ -246,5 +248,38 @@ class TrackPlanModuleTest {
         station.simulateFeedback(4, 2, occupied = true)
         advanceUntilIdle()
         assertFailsWith<IllegalStateException> { service.turnTo(table, 12) }
+    }
+
+    @Test
+    fun trainsStandInBlocksAndMove() = runTest {
+        val service = start(LicenseInfo.FREE)
+        service.placeTrain(1 to 3, 12)
+        service.placeTrain(1 to 4, 7)
+        assertFailsWith<BlockException> { service.placeTrain(1 to 3, 7) }
+        assertFailsWith<BlockException> { service.moveTrain(1 to 3, 1 to 4) }
+        service.moveTrain(1 to 3, 2 to 1)
+        assertEquals(mapOf((2 to 1) to 12, (1 to 4) to 7), service.trains.value)
+        // Dieselbe Lok in einen anderen Block setzen: sie wechselt dorthin
+        service.placeTrain(2 to 5, 7)
+        assertEquals(mapOf((2 to 1) to 12, (2 to 5) to 7), service.trains.value)
+        service.removeTrain(2 to 1)
+        assertEquals(mapOf((2 to 5) to 7), service.trains.value)
+    }
+
+    @Test
+    fun reservationsBelongToTheirOwner() = runTest {
+        val service = start(LicenseInfo.FREE)
+        val a = BlockReservation("fs:a", "Fahrstraße A")
+        service.reserve(listOf(1 to 1, 1 to 2), a)
+        assertFailsWith<BlockException> { service.reserve(listOf(1 to 2, 1 to 3), BlockReservation("fs:b", "Fahrstraße B")) }
+        assertEquals(setOf(1 to 1, 1 to 2), service.reservations.value.keys, "nichts halb reserviert")
+        service.reserve(listOf(1 to 2), a)
+        service.release(1 to 1)
+        assertEquals(setOf(1 to 2), service.reservations.value.keys)
+        service.releaseOwner("fs:a")
+        assertTrue(service.reservations.value.isEmpty())
+        service.reserve(listOf(3 to 3), a)
+        service.releaseAll()
+        assertTrue(service.reservations.value.isEmpty())
     }
 }

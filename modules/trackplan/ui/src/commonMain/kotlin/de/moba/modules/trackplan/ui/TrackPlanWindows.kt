@@ -115,7 +115,8 @@ object TrackPlanWindows : ModuleWindows {
         val library = session?.host?.service(SymbolService::class)?.symbols?.collectAsState()?.value.orEmpty()
         val message by TrackPlanUiState.message.collectAsState()
         CompositionLocalProvider(LocalSymbolLibrary provides library) {
-            val op = rememberPlanOperation(service)
+            val op = rememberPlanOperation(app, service)
+            TrainDragLayer(service, Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
                 message?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp)) }
                 BoxWithConstraints(Modifier.weight(1f)) {
@@ -123,8 +124,12 @@ object TrackPlanWindows : ModuleWindows {
                     val inner = 26.dp
                     val fit = minOf((maxWidth - inner) / plan.width, (maxHeight - inner) / plan.height)
                     val cell = fit.coerceIn(MIN_CELL.dp, MAX_WINDOW_CELL.dp)
-                    PlanCard(plan, op.state, Modifier.fillMaxSize(), fill = true, onTap = op.onTap, menu = op.menu, cellSize = cell, showTitle = false)
+                    PlanCard(
+                        plan, op.state, Modifier.fillMaxSize(), fill = true, onTap = op.onTap,
+                        onContext = op.onContext, overlay = op.overlay, cellSize = cell, showTitle = false,
+                    )
                 }
+            }
             }
         }
     }
