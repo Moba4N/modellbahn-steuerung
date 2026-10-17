@@ -836,11 +836,11 @@ class ScreenshotTest {
             var p = start
             fun put(t: TrackTile) { p = p.put(t) }
             (0..19).forEach { x -> put(TrackTile(x, 2, TrackShape.STRAIGHT, 2)) }
-            put(TrackTile(3, 2, TrackShape.FEEDBACK, 2, feedbackModule = 5, feedbackContact = 1).withProp(AccessoryProps.NAME, "Messung A"))
-            put(TrackTile(11, 2, TrackShape.FEEDBACK, 2, feedbackModule = 5, feedbackContact = 2).withProp(AccessoryProps.NAME, "Messung B"))
+            put(TrackTile(3, 2, TrackShape.FEEDBACK, 2, feedbackModule = 3, feedbackContact = 14).withProp(AccessoryProps.NAME, "Messung A"))
+            put(TrackTile(11, 2, TrackShape.FEEDBACK, 2, feedbackModule = 3, feedbackContact = 15).withProp(AccessoryProps.NAME, "Messung B"))
             put(
                 TrackTile(7, 2, TrackShape.MEASUREMENT, 2).withProp(AccessoryProps.NAME, "Messstrecke")
-                    .withProp(AccessoryProps.MEASURE_START, "5.1").withProp(AccessoryProps.MEASURE_END, "5.2")
+                    .withProp(AccessoryProps.MEASURE_START, "3.14").withProp(AccessoryProps.MEASURE_END, "3.15")
                     .withProp(AccessoryProps.MEASURE_LENGTH, "300"),
             )
             put(TrackTile(16, 2, TrackShape.TURNOUT_RIGHT, 2, address = 40))
@@ -859,10 +859,10 @@ class ScreenshotTest {
         proPlansService.setClock(8, 30)
         proPlansService.setClockFactor(6)
         proPlansService.startClock()
-        proPlansService.placeTrain(5 to 1, 12)
-        proSim.simulateFeedback(5, 1, occupied = true)
+        proPlansService.placeTrain(3 to 14, 12)
+        proSim.simulateFeedback(3, 14, occupied = true)
         delay(600)
-        proSim.simulateFeedback(5, 2, occupied = true)
+        proSim.simulateFeedback(3, 15, occupied = true)
         delay(100)
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
         TrackPlanUiState.tileSize.value = 36
@@ -926,8 +926,8 @@ class ScreenshotTest {
         TrackPlanUiState.tileSize.value = 24
         proPlansService.stopClock()
         proPlansService.trains.value.keys.forEach(proPlansService::removeTrain)
-        proSim.simulateFeedback(5, 1, occupied = false)
-        proSim.simulateFeedback(5, 2, occupied = false)
+        proSim.simulateFeedback(3, 14, occupied = false)
+        proSim.simulateFeedback(3, 15, occupied = false)
         proPlansService.toggleVisible(visibleBefore.first())
         proPlansService.toggleVisible(measurePlan.id)
         proPlansService.removePlan(measurePlan.id)
