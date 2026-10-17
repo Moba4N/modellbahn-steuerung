@@ -176,9 +176,12 @@ class EditingUiTest {
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
         onNodeWithText("angehalten", substring = true).performClick()
         onNodeWithText("×12").performClick()
+        // Eine laufende Uhr tickt endlos; ohne Anhalten der Testuhr liefe sie nie leer
+        mainClock.autoAdvance = false
         onNodeWithText("Starten", substring = true).performClick()
-        waitForIdle()
         assertTrue(app.plans().clock.value.running)
+        app.plans().stopClock()
         assertEquals(12, app.plans().clock.value.factor)
+        waitForIdle()
     }
 }
