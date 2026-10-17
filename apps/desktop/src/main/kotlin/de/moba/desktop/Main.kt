@@ -39,10 +39,14 @@ import de.moba.modules.calibration.FileCalibrationStore
 import de.moba.modules.calibration.ui.CalibrationScreen
 import de.moba.modules.routes.FileRouteStore
 import de.moba.modules.monitor.MonitorModule
+import de.moba.modules.actions.ActionModule
+import de.moba.modules.actions.ActionRepository
+import de.moba.modules.actions.FileActionStore
 import de.moba.modules.routes.RouteModule
 import de.moba.modules.routes.RouteRepository
 import de.moba.modules.routes.ui.RoutesScreen
 import de.moba.modules.monitor.ui.MonitorTool
+import de.moba.modules.actions.ui.ActionsMenu
 import de.moba.modules.throttles.FileThrottleBarStore
 import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
@@ -88,6 +92,7 @@ private class LayoutData(dir: File) {
     val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dir, "fahrregler.txt")))
     val calibration = CalibrationRepository(FileCalibrationStore(File(dir, "einmessen.txt")))
     val routes = RouteRepository(FileRouteStore(File(dir, "fahrstrassen.txt")))
+    val actions = ActionRepository(FileActionStore(File(dir, "aktionen.txt")))
 }
 
 private var data = LayoutData(layoutFiles.dir)
@@ -166,7 +171,7 @@ fun main() = application {
             discovery = StationCatalog.discovery,
             moduleFactory = {
                 val d = data
-                listOf(DrivingModule(), TrackPlanModule(d.trackPlans), VehicleModule(d.vehicles), DecoderModule(d.decoders), SymbolModule(d.symbols), ThrottleBarModule(d.throttleBar), CalibrationModule(d.calibration), RouteModule(d.routes), MonitorModule())
+                listOf(DrivingModule(), TrackPlanModule(d.trackPlans), VehicleModule(d.vehicles), DecoderModule(d.decoders), SymbolModule(d.symbols), ThrottleBarModule(d.throttleBar), CalibrationModule(d.calibration), RouteModule(d.routes), MonitorModule(), ActionModule(d.actions))
             },
             settings = DesktopSettings,
             imageStore = DesktopImageStore,
@@ -204,6 +209,7 @@ fun main() = application {
             sound = sound,
             effects = listOf(TrackPlanSounds, TrackPlanTrains),
             files = files,
+            menus = listOf(ActionsMenu),
         )
     }
     // Gleisbilder in eigenen Fenstern (Pro), z. B. auf einem zweiten und dritten Bildschirm

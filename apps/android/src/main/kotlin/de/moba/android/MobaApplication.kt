@@ -23,6 +23,9 @@ import de.moba.modules.calibration.CalibrationRepository
 import de.moba.modules.calibration.FileCalibrationStore
 import de.moba.modules.routes.FileRouteStore
 import de.moba.modules.monitor.MonitorModule
+import de.moba.modules.actions.ActionModule
+import de.moba.modules.actions.ActionRepository
+import de.moba.modules.actions.FileActionStore
 import de.moba.modules.routes.RouteModule
 import de.moba.modules.routes.RouteRepository
 import de.moba.modules.throttles.FileThrottleBarStore
@@ -56,6 +59,7 @@ class MobaApplication : Application() {
         val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dir, "fahrregler.txt")))
         val calibration = CalibrationRepository(FileCalibrationStore(File(dir, "einmessen.txt")))
         val routes = RouteRepository(FileRouteStore(File(dir, "fahrstrassen.txt")))
+        val actions = ActionRepository(FileActionStore(File(dir, "aktionen.txt")))
     }
 
     private var data: LayoutData? = null
@@ -77,7 +81,7 @@ class MobaApplication : Application() {
             discovery = StationCatalog.discovery,
             moduleFactory = {
                 val d = data ?: LayoutData(layoutFiles.dir).also { data = it }
-                listOf(DrivingModule(), TrackPlanModule(d.trackPlans), VehicleModule(d.vehicles), DecoderModule(d.decoders), SymbolModule(d.symbols), ThrottleBarModule(d.throttleBar), CalibrationModule(d.calibration), RouteModule(d.routes), MonitorModule())
+                listOf(DrivingModule(), TrackPlanModule(d.trackPlans), VehicleModule(d.vehicles), DecoderModule(d.decoders), SymbolModule(d.symbols), ThrottleBarModule(d.throttleBar), CalibrationModule(d.calibration), RouteModule(d.routes), MonitorModule(), ActionModule(d.actions))
             },
             settings = object : SettingsStore {
                 override fun get(key: String): String? = prefs.getString(key, null)

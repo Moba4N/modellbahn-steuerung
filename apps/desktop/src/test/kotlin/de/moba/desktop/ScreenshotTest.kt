@@ -65,6 +65,19 @@ import de.moba.modules.monitor.api.MONITOR_MODULE_ID
 import de.moba.modules.monitor.api.MonitorKind
 import de.moba.modules.monitor.ui.MonitorTool
 import de.moba.modules.monitor.ui.MonitorUiState
+import de.moba.modules.actions.ActionModule
+import de.moba.modules.actions.ActionRepository
+import de.moba.modules.actions.api.ActionBook
+import de.moba.modules.actions.api.ActionRule
+import de.moba.modules.actions.api.ActionStore
+import de.moba.modules.actions.api.Command
+import de.moba.modules.actions.api.CommandType
+import de.moba.modules.actions.api.Condition
+import de.moba.modules.actions.api.ConditionType
+import de.moba.modules.actions.ui.ActionsMenu
+import de.moba.modules.actions.ui.ActionsTab
+import de.moba.modules.actions.ui.ActionsUiState
+import de.moba.modules.actions.ui.ActionsWindow
 import de.moba.modules.routes.RouteModule
 import de.moba.modules.routes.RouteRepository
 import de.moba.modules.routes.api.Feedback
@@ -92,6 +105,7 @@ import de.moba.modules.symbols.ui.SymbolsUiState
 import de.moba.modules.vehicles.VehicleModule
 import de.moba.modules.vehicles.VehicleRepository
 import de.moba.modules.vehicles.api.Epoch
+import de.moba.modules.vehicles.api.Gauge
 import de.moba.modules.vehicles.api.LocoRecord
 import de.moba.modules.vehicles.api.Traction
 import de.moba.modules.vehicles.api.VehicleGroup
@@ -230,6 +244,60 @@ class ScreenshotTest {
                 override fun save(book: RouteBook) = Unit
             },
         )
+        // Aktionen wie in iTrain: Bedingungsbaum aus Block, Zeit, Zufall, Brennstoff, Gattung, Spurweite und Wagen
+        val proActions = ActionRepository(
+            object : ActionStore {
+                override fun load() = ActionBook(
+                    rules = listOf(
+                        ActionRule(
+                            "ak-1", "Einfahrt Bahnhof: Signal auf Fahrt",
+                            condition = Condition.and(
+                                Condition.of(ConditionType.BLOCK_OCCUPIED, "block" to "1.3"),
+                                Condition.of(ConditionType.BLOCK_FREE, "block" to "1.4"),
+                                Condition.of(ConditionType.TIME, "von" to "05:00", "bis" to "23:30"),
+                            ),
+                            commands = listOf(
+                                Command.of(CommandType.ACCESSORY, "adresse" to "30", "stellung" to "gerade"),
+                                Command.of(CommandType.LOCO_FUNCTION, "lok" to "5", "funktion" to "2", "zustand" to "an"),
+                            ),
+                        ),
+                        ActionRule(
+                            "ak-2", "Dampflok fasst Wasser",
+                            condition = Condition.and(
+                                Condition.of(ConditionType.FUEL, "lok" to "50", "vergleich" to "unter", "prozent" to "40"),
+                                Condition.of(ConditionType.BLOCK_POSITION, "block" to "3.2", "position" to "halt"),
+                                Condition.of(ConditionType.CATEGORY, "block" to "3.2", "gattung" to "STEAM"),
+                            ),
+                            commands = listOf(
+                                Command.of(CommandType.LOCO_FUNCTION, "lok" to "50", "funktion" to "4", "zustand" to "an"),
+                                Command.of(CommandType.WAIT, "sekunden" to "20"),
+                                Command.of(CommandType.REFUEL, "lok" to "50"),
+                                Command.of(CommandType.MESSAGE, "text" to "BR 50 hat Wasser gefasst"),
+                            ),
+                        ),
+                        ActionRule(
+                            "ak-3", "Nachts manchmal ein Kesselzug",
+                            condition = Condition.and(
+                                Condition.of(ConditionType.TRAIN_ROUTE, "zugroute" to "zr-1", "zustand" to "steht"),
+                                Condition.of(ConditionType.RANDOM, "prozent" to "30"),
+                                Condition.or(
+                                    Condition.of(ConditionType.WAGON, "block" to "1.3", "bauart" to "TANK"),
+                                    Condition(ConditionType.GAUGE, mapOf("block" to "1.3", "spur" to "H0M"), negate = true),
+                                ),
+                            ),
+                            commands = listOf(Command.of(CommandType.AUTOMATION_START, "zugroute" to "zr-1")),
+                        ),
+                        ActionRule(
+                            "ak-4", "Betriebsschluss", enabled = false,
+                            condition = Condition.of(ConditionType.TIME, "von" to "23:30", "bis" to "05:00", "uhr" to "echt"),
+                            commands = listOf(Command.of(CommandType.EMERGENCY_STOP), Command.of(CommandType.TRACK_POWER, "zustand" to "aus")),
+                        ),
+                    ),
+                    fuel = mapOf(50 to 34.0, 5 to 81.0),
+                )
+                override fun save(book: ActionBook) = Unit
+            },
+        )
         val pro = MobaApp(
             scope = scope,
             drivers = listOf(namedSimulator),
@@ -238,7 +306,7 @@ class ScreenshotTest {
                     DrivingModule(), TrackPlanModule(TrackPlanRepository(proPlans)), VehicleModule(VehicleRepository(null)),
                     DecoderModule(DecoderRepository(null)), SymbolModule(SymbolRepository(null)),
                     ThrottleBarModule(ThrottleBarRepository(proThrottles)), CalibrationModule(CalibrationRepository(proCalibration)),
-                    RouteModule(proRoutes), MonitorModule(),
+                    RouteModule(proRoutes), MonitorModule(), ActionModule(proActions),
                 )
             },
             license = LicenseInfo.of("pro", "decoder"),
@@ -979,6 +1047,47 @@ class ScreenshotTest {
             MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport)
         }
         FileUiState.menuOpen.value = false
+
+        // Aktionen: eigenes Burger-Menue neben "Datei", Editor mit Bedingungsbaum, Brennstoff
+        proVehicles.saveLoco(LocoRecord("fz-lok-50", "BR 50 Kabinentender", 50, "BR 50", "DB", Epoch.III, Traction.STEAM, gauge = Gauge.H0, consist = listOf("fz-gw-4", "fz-gw-1")))
+        proVehicles.saveLoco(LocoRecord("fz-lok-5", "V 100", 5, "BR 212", "DB", Epoch.III, Traction.DIESEL, gauge = Gauge.H0))
+        proSim.setLocoSpeed(50, 40, Direction.FORWARD)
+        proSim.setLocoSpeed(5, 0, Direction.FORWARD)
+        delay(500)
+        pro.setDarkTheme(true)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        ActionsUiState.menuOpen.value = true
+        render("pc-aktionen-menue-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu))
+        }
+        ActionsUiState.menuOpen.value = false
+        pro.setDarkTheme(false)
+        ActionsUiState.window.value = ActionsWindow(ruleId = "ak-3")
+        render("pc-aktionen-editor-hell", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu))
+        }
+        ActionsUiState.window.value = ActionsWindow(ruleId = "ak-2")
+        render("handy-aktionen-editor-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu))
+        }
+        pro.setDarkTheme(true)
+        ActionsUiState.window.value = ActionsWindow(ActionsTab.FUEL)
+        render("pc-aktionen-brennstoff-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu))
+        }
+        ActionsUiState.window.value = null
+        pro.setDarkTheme(false)
+        ActionsUiState.menuOpen.value = true
+        render("handy-aktionen-menue-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu))
+        }
+        ActionsUiState.menuOpen.value = false
+        VehiclesUiState.draft.value = VehicleDraft.Loco(proVehicles.fleet.value.locos.first { it.id == "fz-lok-50" }, isNew = false)
+        render("pc-lok-spurweite-wagen-hell", 1440, 1300, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId, menus = listOf(ActionsMenu))
+        }
+        VehiclesUiState.draft.value = null
+        proSim.setLocoSpeed(50, 0, Direction.FORWARD)
         fileRoot.deleteRecursively()
 
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)

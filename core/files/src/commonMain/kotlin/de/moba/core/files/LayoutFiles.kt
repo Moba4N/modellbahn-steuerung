@@ -10,6 +10,7 @@ enum class DataPart(val label: String, val files: List<String>, val folders: Lis
     TRACK_PLANS("Gleisbilder", listOf("gleisbilder.txt")),
     VEHICLES("Fahrzeuge mit Fotos", listOf("fahrzeuge.txt"), listOf("fahrzeugbilder")),
     ROUTES("Fahrstraßen, Pendel und Zugrouten", listOf("fahrstrassen.txt")),
+    ACTIONS("Aktionen und Brennstoff", listOf("aktionen.txt")),
     SYMBOLS("Eigene Symbole", listOf("symbole.txt")),
     DECODERS("Decoder", listOf("decoder.txt")),
     CALIBRATION("Einmessungen", listOf("einmessen.txt")),

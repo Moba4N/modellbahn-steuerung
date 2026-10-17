@@ -34,6 +34,8 @@ dependencies {
     implementation(project(":modules:routes:impl"))
     implementation(project(":modules:monitor:ui"))
     implementation(project(":modules:monitor:impl"))
+    implementation(project(":modules:actions:ui"))
+    implementation(project(":modules:actions:impl"))
     implementation(project(":modules:decoder:ui"))
     implementation(project(":modules:decoder:impl"))
     implementation(project(":adapters:catalog"))

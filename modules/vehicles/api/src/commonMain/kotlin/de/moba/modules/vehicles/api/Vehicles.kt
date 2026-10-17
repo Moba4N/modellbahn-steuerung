@@ -29,6 +29,20 @@ enum class Traction(val label: String) {
     OTHER("Sonstige"),
 }
 
+/** Spurweite wie in iTrain; wichtig fuer Bedingungen in Aktionen (z. B. Dreischienengleis H0/H0m). */
+enum class Gauge(val label: String) {
+    Z("Z (6,5 mm)"),
+    N("N (9 mm)"),
+    TT("TT (12 mm)"),
+    H0("H0 (16,5 mm)"),
+    H0M("H0m (12 mm)"),
+    H0E("H0e (9 mm)"),
+    S("S (22,5 mm)"),
+    ZERO("0 (32 mm)"),
+    ONE("1 (45 mm)"),
+    G("G / IIm (45 mm)"),
+}
+
 enum class DecoderProtocol(val label: String) {
     DCC("DCC"),
     MM("Motorola (MM)"),
@@ -58,6 +72,9 @@ data class LocoRecord(
     val notes: String = "",
     /** Fuehrerstand, Traegheitssimulation, Rueckmelde-Offset, Reaktionsverzoegerung und Zeitraum. */
     val dynamics: LocoDynamics = LocoDynamics(),
+    val gauge: Gauge? = null,
+    /** Wagen, die diese Lok als Zug zieht (Ids aus der Wagenliste), z. B. fuer Bedingungen in Aktionen. */
+    val consist: List<String> = emptyList(),
 )
 
 /** Bauart einer Wagengattung; [code] ist der Kennbuchstabe nach UIC. */

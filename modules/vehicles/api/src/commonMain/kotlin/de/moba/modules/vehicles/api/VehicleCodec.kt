@@ -7,7 +7,7 @@ import de.moba.core.model.LocoDynamics
  *
  * ```
  * MOBA-FAHRZEUGE 1
- * lok    <id> <name> <adresse> <baureihe> <bahn> <epoche> <antrieb> <protokoll> <hersteller> <art.-nr.> <vmax> <laenge> <notiz>
+ * lok    <id> <name> <adresse> <baureihe> <bahn> <epoche> <antrieb> <protokoll> <hersteller> <art.-nr.> <vmax> <laenge> <notiz> <spurweite> <wagen-ids mit Komma>
  * fn     <lok-id> <nummer> <name>
  * fahr   <lok-id> <fuehrerstand 0/1> <traegheit 0/1> <anfahren s> <bremsen s> <zeitraum ms> <offset mm> <reaktion ms>
  * wagen  <id> <gruppe> <gattung> <name> <bauart> <bahn> <epoche> <laenge> <anzahl> <hersteller> <art.-nr.> <notiz>
@@ -22,7 +22,7 @@ object VehicleCodec {
         for (l in fleet.locos) {
             line(
                 "lok", l.id, l.name, l.address, l.series, l.railway, l.epoch?.name, l.traction?.name, l.protocol.name,
-                l.manufacturer, l.articleNumber, l.vmax, l.lengthMm, l.notes,
+                l.manufacturer, l.articleNumber, l.vmax, l.lengthMm, l.notes, l.gauge?.name, l.consist.joinToString(","),
             )
             for ((n, label) in l.functions.toSortedMap()) line("fn", l.id, n, label)
             val d = l.dynamics
@@ -70,6 +70,8 @@ object VehicleCodec {
                         vmax = at(11).toIntOrNull(),
                         lengthMm = at(12).toIntOrNull(),
                         notes = at(13),
+                        gauge = Gauge.entries.firstOrNull { it.name == at(14) },
+                        consist = at(15).split(',').filter { it.isNotBlank() },
                     )
                     "fn" -> {
                         val i = locos.indexOfFirst { it.id == at(1) }

@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Check
@@ -134,6 +135,8 @@ fun MobaShell(
     effects: List<ModuleEffect> = emptyList(),
     /** Anlagen-Dateien fuer das Datei-Menue (zweites Burger-Menue links); `null` = kein Datei-Menue. */
     files: FileSupport? = null,
+    /** Weitere Burger-Menues der Module neben "Datei", z. B. "Aktionen". */
+    menus: List<ModuleMenu> = emptyList(),
 ) {
     SideEffect { ShellUiState.separateWindows.value = separateWindows }
     val dark by app.darkTheme.collectAsState()
@@ -150,6 +153,7 @@ fun MobaShell(
     val activeDocks = docks.filter { active(it.moduleId) }
     val activeTools = tools.filter { active(it.moduleId) }
     val activeEffects = effects.filter { active(it.moduleId) }
+    val activeMenus = menus.filter { active(it.moduleId) }
     val openTool by ShellUiState.openTool.collectAsState()
     LaunchedEffect(app) {
         ShellUiState.panelOpen.value = app.preference(PREF_PANEL) == "an"
@@ -180,6 +184,7 @@ fun MobaShell(
                         app,
                         files = files,
                         fileMenu = { support -> FileMenu(support, compact = !wide, unsaved = unsaved, run = fileGuard::run) },
+                        menus = activeMenus,
                         compact = !wide,
                         panelToggle = wide && activePanels.isNotEmpty(),
                         destinations = listOf(Destination(OVERVIEW, "Übersicht", Icons.Outlined.Dashboard)) +
@@ -276,6 +281,7 @@ fun MobaShell(
             activeTools.firstOrNull { it.moduleId == openTool }?.let { tool ->
                 ToolWindow(app, tool) { ShellUiState.openTool.value = null }
             }
+            activeMenus.forEach { menu -> key(menu.moduleId) { menu.Dialogs(app) } }
             if (files != null) {
                 FileDialogs(files, unsaved, { visible.flatMap { it.printables(app) } }, fileGuard)
             }
@@ -307,6 +313,7 @@ private fun TopBar(
     app: MobaApp,
     files: FileSupport?,
     fileMenu: @Composable (FileSupport) -> Unit,
+    menus: List<ModuleMenu>,
     compact: Boolean,
     panelToggle: Boolean,
     destinations: List<Destination>,
@@ -328,6 +335,7 @@ private fun TopBar(
         ) {
             // Datei-Menue ganz links wie in Desktop-Programmen
             files?.let { fileMenu(it) }
+            menus.forEach { menu -> key(menu.moduleId) { MenuButton(app, menu, compact) } }
             Icon(Icons.Filled.Train, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
             if (!compact) {
                 Text("Modellbahn-Steuerung", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -392,6 +400,26 @@ private fun TopBar(
                 Spacer(Modifier.width(8.dp))
                 Text("NOTHALT", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
             }
+        }
+    }
+}
+
+/** Burger-Menue eines Moduls in der oberen Leiste; schmal nur das Symbol. */
+@Composable
+private fun MenuButton(app: MobaApp, menu: ModuleMenu, compact: Boolean) {
+    val open by menu.expanded.collectAsState()
+    Box {
+        if (compact) {
+            IconButton(onClick = { menu.expanded.value = !open }) { Icon(menu.icon, menu.title) }
+        } else {
+            TextButton(onClick = { menu.expanded.value = !open }) {
+                Icon(menu.icon, null, Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(menu.title, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { menu.expanded.value = false }, modifier = Modifier.widthIn(min = 280.dp)) {
+            with(menu) { Items(app) { menu.expanded.value = false } }
         }
     }
 }

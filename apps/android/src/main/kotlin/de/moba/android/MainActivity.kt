@@ -22,6 +22,7 @@ import de.moba.modules.vehicles.ui.VehiclesScreen
 import de.moba.modules.calibration.ui.CalibrationScreen
 import de.moba.modules.routes.ui.RoutesScreen
 import de.moba.modules.monitor.ui.MonitorTool
+import de.moba.modules.actions.ui.ActionsMenu
 import de.moba.modules.throttles.ui.ThrottleDock
 import de.moba.ui.shell.ExitGuard
 import de.moba.ui.shell.ImagePicker
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
                 sound = sound,
                 effects = listOf(TrackPlanSounds, TrackPlanTrains),
                 files = moba.files,
+                menus = listOf(ActionsMenu),
             )
         }
     }

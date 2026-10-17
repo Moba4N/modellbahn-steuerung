@@ -327,6 +327,27 @@ Das zweite Burger-Menue links oben ("Datei") arbeitet wie das Datei-Menue in iTr
 - **Drucken**: jedes Gleisbild sowie Lok- und Wagenliste mit Vorschau; Windows ueber den Druckerdialog
   (auch "Microsoft Print to PDF"), Android ueber den Druckdienst des Systems.
 
+## Aktionen
+
+Das dritte Burger-Menue oben links ("Aktionen", neben "Datei") arbeitet wie die Aktionen in iTrain: Eine Aktion hat
+einen Bedingungsbaum und eine Befehlsliste. Sobald die Bedingung erfuellt wird (Wechsel von "nicht erfuellt" zu
+"erfuellt"), fuehrt die App die Befehle der Reihe nach aus. Im Menue lassen sich Aktionen ein- und ausschalten und
+von Hand starten; "Aktionen bearbeiten …" oeffnet den Editor mit Live-Anzeige, ob die Bedingung gerade erfuellt ist.
+Bearbeiten ist kostenlos, Ausfuehren braucht Pro. Gespeichert wird in `aktionen.txt` (auch in Sicherung und Export).
+
+- **Bedingungen**: Operator (und/oder, beliebig verschachtelt, jede Bedingung mit "nicht"), Zufällig (wird einmal
+  ausgewuerfelt, wenn der Rest erfuellt ist), Zeit (Modellzeit-Uhr oder echte Uhr, auch ueber Mitternacht),
+  Schnittstelle (Zentrale verbunden), Rückmeldung, Zubehör (Stellung), Zubehör-Reservierung (Adresse in einer
+  gestellten Fahrstrasse), Booster (Gleisspannung), Block frei, Block belegt, Blockzustand (frei, belegt, reserviert,
+  Zug darin), Block warten (Zug steht seit n Sekunden), Position im Block (faehrt ein, haelt), Zug, Zugrichtung,
+  Zugzustand (faehrt, steht, automatisch), Gattung (Antrieb der Lok im Block), Zugroute (Pendel oder Zugroute laeuft),
+  Spurweite, Lokomotive (Fahrstufe oder Funktion), Wagen (Bauart eines Wagens im Zug) und Lokomotive-Brennstoff.
+- **Befehle**: Zubehör schalten, Fahrstrasse stellen/aufloesen, Zugroute starten/anhalten, Lok fahren, anhalten,
+  Lokfunktion, Gleisspannung, Nothalt, Warten, Modellzeit-Uhr, Auftanken, Block freigeben, Meldung (im Protokoll).
+- **Brennstoff**: Dampfloks reichen 20 Minuten, Diesel und Triebwagen 60 Minuten volle Fahrt; langsamer haelt der
+  Vorrat entsprechend laenger, Elektroloks verbrauchen nichts. Der Reiter "Brennstoff" zeigt den Vorrat und tankt auf.
+- Fuer Gattung, Spurweite und Wagen haben Loks unter Fahrzeuge jetzt die Felder "Spurweite" und "Wagen im Zug".
+
 ## Monitor
 
 Zusatzmodul, kostenlos, nur ueber das Burger-Menue unter "Werkzeuge" erreichbar. Zeigt live, was die App an die

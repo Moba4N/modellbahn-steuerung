@@ -68,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.moba.modules.vehicles.api.DecoderProtocol
 import de.moba.modules.vehicles.api.Epoch
+import de.moba.modules.vehicles.api.Gauge
 import de.moba.modules.vehicles.api.Fleet
 import de.moba.modules.vehicles.api.LocoRecord
 import de.moba.core.model.LocoDynamics
@@ -446,6 +447,8 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
         NumberInput("Vmax (km/h)", vmax, Modifier.weight(1f)) { vmax = it }
         NumberInput("Länge (mm)", length, Modifier.weight(1f)) { length = it }
     }
+    Choice("Spurweite", Gauge.entries, r.gauge, { it.label }, Modifier.fillMaxWidth(), optional = true) { r = r.copy(gauge = it) }
+    ConsistPicker(service, r.consist) { r = r.copy(consist = it) }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         TextInput("Hersteller", r.manufacturer, Modifier.weight(1f)) { r = r.copy(manufacturer = it) }
         TextInput("Artikelnummer", r.articleNumber, Modifier.weight(1f)) { r = r.copy(articleNumber = it) }
@@ -657,6 +660,25 @@ internal fun parseSeconds(text: String): Double? = text.replace(',', '.').toDoub
 
 internal fun formatSeconds(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString().replace('.', ',')
+
+/** Wagen, die die Lok gerade zieht (fuer Bedingungen "Wagen" in Aktionen); Auswahl aus den Wagengattungen. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ConsistPicker(service: VehicleService, selected: List<String>, onChange: (List<String>) -> Unit) {
+    val fleet by service.fleet.collectAsState()
+    if (fleet.wagons.isEmpty()) return
+    Text("Wagen im Zug", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        fleet.wagons.forEach { w ->
+            val on = w.id in selected
+            FilterChip(
+                selected = on,
+                onClick = { onChange(if (on) selected - w.id else selected + w.id) },
+                label = { Text(listOf(w.code, w.name).filter { it.isNotBlank() }.joinToString(" ")) },
+            )
+        }
+    }
+}
 
 /** Auswahlfeld mit Menue; mit [optional] gibt es einen Eintrag "keine Angabe". */
 @Composable

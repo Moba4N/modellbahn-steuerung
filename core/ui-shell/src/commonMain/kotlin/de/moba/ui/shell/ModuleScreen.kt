@@ -1,7 +1,9 @@
 package de.moba.ui.shell
 
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Eine Ansicht, die ein Fachmodul in die App einhaengt. Sichtbar, solange das Modul aktiv ist. */
 interface ModuleScreen {
@@ -67,4 +69,25 @@ interface ModuleTool {
 
     @Composable
     fun Content(app: MobaApp, onClose: () -> Unit)
+}
+
+/**
+ * Ein eigenes Burger-Menue in der oberen Leiste, rechts neben "Datei" (z. B. "Aktionen").
+ * Es erscheint, solange das Modul laeuft.
+ */
+interface ModuleMenu {
+    val moduleId: String
+    val title: String
+    val icon: ImageVector
+
+    /** Ob das Menue aufgeklappt ist; von aussen setzbar (z. B. fuer Vorschaubilder). */
+    val expanded: MutableStateFlow<Boolean>
+
+    /** Eintraege des aufgeklappten Menues; [close] klappt es zu. */
+    @Composable
+    fun ColumnScope.Items(app: MobaApp, close: () -> Unit)
+
+    /** Fenster, die das Menue oeffnet; immer eingehaengt, solange das Modul laeuft. */
+    @Composable
+    fun Dialogs(app: MobaApp)
 }

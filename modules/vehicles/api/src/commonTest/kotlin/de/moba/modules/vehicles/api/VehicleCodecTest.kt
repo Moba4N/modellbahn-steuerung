@@ -14,7 +14,7 @@ class VehicleCodecTest {
                     "lok-1", "BR 218 \"Tab\tTest\"", 3, "BR 218", "DB", Epoch.IV, Traction.DIESEL, DecoderProtocol.MFX,
                     "Roco", "73712", 140, 189, mapOf(0 to "Licht", 1 to "Sound"), "Zeile 1\nZeile 2",
                 ),
-                LocoRecord("lok-2", "V 100", 5),
+                LocoRecord("lok-2", "V 100", 5, gauge = Gauge.H0M, consist = listOf("gw-1", "pw-1")),
             ),
             wagons = listOf(
                 WagonClass("gw-1", VehicleGroup.FREIGHT, "Eaos", "Hochbordwagen", WagonCategory.OPEN, "DB", Epoch.IV, 162, 6),
