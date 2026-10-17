@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import de.moba.adapters.catalog.StationCatalog
@@ -72,15 +73,15 @@ class ActionsUiTest {
         onNodeWithText("Neue Aktion …").performClick()
 
         onAllNodes(hasSetTextAction())[0].performTextInput("Einfahrt Nord")
-        onNodeWithText("Bedingung hinzufügen").performClick()
+        onNodeWithText("Bedingung hinzufügen").performScrollTo().performClick()
         onNodeWithText("Block belegt").performClick()
         onAllNodes(hasSetTextAction())[1].performTextInput("1.3")
-        onNodeWithText("Befehl hinzufügen").performClick()
+        onNodeWithText("Befehl hinzufügen").performScrollTo().performClick()
         onNodeWithText("Zubehör schalten").performClick()
         onAllNodes(hasSetTextAction())[2].performTextInput("7")
-        onNodeWithText("Stellung: gerade / grün").performClick()
+        onNodeWithText("Stellung: gerade / grün").performScrollTo().performClick()
         onNodeWithText("abzweigend / rot").performClick()
-        onNodeWithText("Speichern").performClick()
+        onNodeWithText("Speichern").performScrollTo().performClick()
         waitForIdle()
 
         val rule = app.actions().book.value.rules.single()

@@ -252,8 +252,8 @@ class ScreenshotTest {
                         ActionRule(
                             "ak-1", "Einfahrt Bahnhof: Signal auf Fahrt",
                             condition = Condition.and(
-                                Condition.of(ConditionType.BLOCK_OCCUPIED, "block" to "1.3"),
-                                Condition.of(ConditionType.BLOCK_FREE, "block" to "1.4"),
+                                Condition.of(ConditionType.BLOCK_OCCUPIED, "block" to "1.5"),
+                                Condition.of(ConditionType.BLOCK_FREE, "block" to "1.6"),
                                 Condition.of(ConditionType.TIME, "von" to "05:00", "bis" to "23:30"),
                             ),
                             commands = listOf(
@@ -276,7 +276,7 @@ class ScreenshotTest {
                             ),
                         ),
                         ActionRule(
-                            "ak-3", "Nachts manchmal ein Kesselzug",
+                            "ak-3", "Nachts manchmal ein Kesselzug", enabled = false,
                             condition = Condition.and(
                                 Condition.of(ConditionType.TRAIN_ROUTE, "zugroute" to "zr-1", "zustand" to "steht"),
                                 Condition.of(ConditionType.RANDOM, "prozent" to "30"),
