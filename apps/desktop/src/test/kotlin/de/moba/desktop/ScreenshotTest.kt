@@ -830,6 +830,108 @@ class ScreenshotTest {
         proPlansService.toggleVisible(accessoryPlan.id)
         proPlansService.removePlan(accessoryPlan.id)
 
+        // Messstrecke, Modellzeit-Uhr und Bearbeiten wie in iTrain
+        pro.setDarkTheme(true)
+        val measurePlan = proPlansService.addPlan("Messung und Uhr").resize(22, 9).let { start ->
+            var p = start
+            fun put(t: TrackTile) { p = p.put(t) }
+            (0..19).forEach { x -> put(TrackTile(x, 2, TrackShape.STRAIGHT, 2)) }
+            put(TrackTile(3, 2, TrackShape.FEEDBACK, 2, feedbackModule = 5, feedbackContact = 1).withProp(AccessoryProps.NAME, "Messung A"))
+            put(TrackTile(11, 2, TrackShape.FEEDBACK, 2, feedbackModule = 5, feedbackContact = 2).withProp(AccessoryProps.NAME, "Messung B"))
+            put(
+                TrackTile(7, 2, TrackShape.MEASUREMENT, 2).withProp(AccessoryProps.NAME, "Messstrecke")
+                    .withProp(AccessoryProps.MEASURE_START, "5.1").withProp(AccessoryProps.MEASURE_END, "5.2")
+                    .withProp(AccessoryProps.MEASURE_LENGTH, "300"),
+            )
+            put(TrackTile(16, 2, TrackShape.TURNOUT_RIGHT, 2, address = 40))
+            put(TrackTile(4, 0, TrackShape.TEXT, text = "Messstrecke 300 mm"))
+            (0..9).forEach { x -> put(TrackTile(x, 6, TrackShape.STRAIGHT, 2)) }
+            put(TrackTile(5, 6, TrackShape.TURNOUT_RIGHT, 2, address = 40))
+            put(TrackTile(15, 5, TrackShape.CLOCK).withProp(AccessoryProps.SIZE, "3"))
+            put(TrackTile(15, 4, TrackShape.TEXT, text = "Bahnhofsuhr"))
+            p
+        }
+        proPlansService.update(measurePlan)
+        val visibleBefore = proPlansService.visiblePlans.value
+        proPlansService.visiblePlans.value.forEach { if (proPlansService.visiblePlans.value.size > 1) proPlansService.toggleVisible(it) }
+        proPlansService.toggleVisible(measurePlan.id)
+        proPlansService.visiblePlans.value.filter { it != measurePlan.id }.forEach { proPlansService.toggleVisible(it) }
+        proPlansService.setClock(8, 30)
+        proPlansService.setClockFactor(6)
+        proPlansService.startClock()
+        proPlansService.placeTrain(5 to 1, 12)
+        proSim.simulateFeedback(5, 1, occupied = true)
+        delay(600)
+        proSim.simulateFeedback(5, 2, occupied = true)
+        delay(100)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        TrackPlanUiState.tileSize.value = 36
+        render("pc-gleisbild-messung-uhr-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.contextMenu.value = measurePlan.id to (7 to 2)
+        render("pc-gleisbild-kontextmenue-messung-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.contextMenu.value = null
+        TrackPlanUiState.clockDialog.value = true
+        render("pc-gleisbild-modellzeit-dialog-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        pro.setDarkTheme(false)
+        render("handy-gleisbild-modellzeit-dialog-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.clockDialog.value = false
+        render("handy-gleisbild-messung-uhr-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        pro.setDarkTheme(true)
+        TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
+        TrackPlanUiState.editPlan.value = measurePlan.id
+        TrackPlanUiState.tool.value = EditTool.Area
+        TrackPlanUiState.tileSize.value = 32
+        TrackPlanUiState.area.value = (1..5).map { it to 2 }.toSet()
+        TrackPlanUiState.clipboard.value = listOf(TrackTile(0, 0, TrackShape.STRAIGHT, 2), TrackTile(1, 0, TrackShape.STRAIGHT, 2))
+        render("pc-gleisbild-editor-bereich-dunkel", 1440, 1000, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.editorMenu.value = 3 to 2
+        render("pc-gleisbild-editor-kontextmenue-dunkel", 1440, 1000, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.editorMenu.value = null
+        TrackPlanUiState.area.value = emptySet()
+        TrackPlanUiState.tool.value = EditTool.Select
+        TrackPlanUiState.selected.value = 5 to 6
+        render("pc-gleisbild-editor-objekt-wiederverwenden-dunkel", 1440, 1000, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.selected.value = 7 to 2
+        TrackPlanUiState.accessoryTab.value = 1
+        render("pc-gleisbild-editor-messstrecke-messung-dunkel", 1440, 1000, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        pro.setDarkTheme(false)
+        TrackPlanUiState.selected.value = null
+        TrackPlanUiState.accessoryTab.value = 0
+        TrackPlanUiState.area.value = (1..5).map { it to 2 }.toSet()
+        render("handy-gleisbild-editor-bereich-hell", 824, 2400, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.area.value = emptySet()
+        TrackPlanUiState.clipboard.value = emptyList()
+        TrackPlanUiState.editPlan.value = null
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        TrackPlanUiState.tileSize.value = 24
+        proPlansService.stopClock()
+        proPlansService.trains.value.keys.forEach(proPlansService::removeTrain)
+        proSim.simulateFeedback(5, 1, occupied = false)
+        proSim.simulateFeedback(5, 2, occupied = false)
+        proPlansService.toggleVisible(visibleBefore.first())
+        proPlansService.toggleVisible(measurePlan.id)
+        proPlansService.removePlan(measurePlan.id)
+
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)
         ShellUiState.licenseOpen.value = true

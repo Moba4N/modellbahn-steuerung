@@ -3,6 +3,7 @@ package de.moba.modules.trackplan.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +27,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.outlined.HighlightAlt
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
@@ -68,6 +74,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +84,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import de.moba.modules.trackplan.api.Footprint
 import de.moba.modules.trackplan.api.LicenseRequiredException
 import de.moba.modules.trackplan.api.TRACKPLAN_MODULE_ID
 import de.moba.modules.trackplan.api.TileKind
@@ -98,9 +108,14 @@ import kotlinx.coroutines.launch
 
 enum class TrackPlanMode { BETRIEB, BEARBEITEN }
 
-/** Werkzeug im Editor: auswaehlen, drehen, entfernen oder eine Gleisform setzen. */
+/**
+ * Werkzeug im Editor: auswaehlen (und ziehen), Bereich aufziehen, drehen, entfernen, Zwischenablage einfuegen
+ * oder eine Gleisform setzen.
+ */
 sealed interface EditTool {
     data object Select : EditTool
+    data object Area : EditTool
+    data object Paste : EditTool
     data object Rotate : EditTool
     data object Erase : EditTool
     data class Place(val shape: TrackShape) : EditTool
@@ -133,6 +148,18 @@ object TrackPlanUiState {
 
     /** Offene Steuerung einer Drehscheibe/Schiebebuehne im Betrieb als (Gleisbild-Id, Zelle). */
     val openTable = MutableStateFlow<Pair<String, Pair<Int, Int>>?>(null)
+
+    /** Dialog der Modellzeit-Uhr offen. */
+    val clockDialog = MutableStateFlow(false)
+
+    /** Markierter Bereich im Editor: Zellen der markierten Kacheln. */
+    val area = MutableStateFlow<Set<Pair<Int, Int>>>(emptySet())
+
+    /** Kopierte Kacheln, linke obere Ecke bei (0, 0); gilt fuer alle Gleisbilder. */
+    val clipboard = MutableStateFlow<List<TrackTile>>(emptyList())
+
+    /** Offenes Kontextmenue im Editor (Zelle). */
+    val editorMenu = MutableStateFlow<Pair<Int, Int>?>(null)
 }
 
 /** Reiter "Gleisbild": Betrieb (Weichen schalten, Belegung sehen) und Editor. */
@@ -251,12 +278,16 @@ internal fun rememberPlanOperation(app: MobaApp, service: TrackPlanService): Pla
     val moving by service.tablesMoving.collectAsState()
     val trains by service.trains.collectAsState()
     val reservations by service.reservations.collectAsState()
+    val measurements by service.measurements.collectAsState()
+    val clock by service.clock.collectAsState()
+    val clockMinutes = rememberModelMinutes(clock)
     val layout by app.layout.layout.collectAsState()
     val names = layout.locos.associate { it.address to it.name }
     val state = TrackState(
         turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, aspects, library) },
         aspects = aspects, tablePositions = positions, moving = moving,
         trains = trains.mapValues { trainLabel(it.value, names) }, reserved = reservations.keys,
+        measurements = measurements, clockMinutes = clockMinutes,
     )
     // Offenes Signalbild-Menue (Gleisbild-Id, Kachel), wie in iTrain per Klick aufs Signal
     var aspectMenu by remember { mutableStateOf<Pair<String, TrackTile>?>(null) }
@@ -267,6 +298,7 @@ internal fun rememberPlanOperation(app: MobaApp, service: TrackPlanService): Pla
     }
     val table by TrackPlanUiState.openTable.collectAsState()
     val onTap = { plan: TrackPlan, x: Int, y: Int ->
+        if (plan.objectAt(x, y)?.shape?.kind == TileKind.CLOCK) TrackPlanUiState.clockDialog.value = true
         plan.objectAt(x, y)?.takeIf { it.shape.hasAddress && (it.address != null || it.shape.kind == TileKind.SOUND) }?.let { tile ->
             when {
                 tile.shape.isTable -> TrackPlanUiState.openTable.value = plan.id to (tile.x to tile.y)
@@ -348,6 +380,7 @@ private fun ColumnScope.OperationView(app: MobaApp, service: TrackPlanService) {
                 },
             )
         }
+        ClockChip(service)
         if (service.maxVisiblePlans > 1) {
             StatusPill(
                 if (windowsAllowed) {
@@ -480,6 +513,7 @@ private fun ColumnScope.EditorView(service: TrackPlanService) {
             Palette(Modifier.width((paletteSize + 176).dp).fillMaxHeight(), vertical = true)
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 EditorGrid(service, plan, Modifier.weight(1f).fillMaxWidth())
+                SelectionBar(service, plan)
                 TileProperties(service, plan)
             }
         }
@@ -492,6 +526,7 @@ private fun ColumnScope.EditorView(service: TrackPlanService) {
             EditorToolbar(service, plans, plan)
             Palette(Modifier.fillMaxWidth(), vertical = false)
             EditorGrid(service, plan, Modifier.height(420.dp).fillMaxWidth())
+            SelectionBar(service, plan)
             TileProperties(service, plan)
         }
     }
@@ -511,7 +546,7 @@ private fun EditorToolbar(service: TrackPlanService, plans: List<TrackPlan>, pla
                 selected = p.id == plan.id,
                 onClick = {
                     TrackPlanUiState.editPlan.value = p.id
-                    TrackPlanUiState.selected.value = null
+                    EditorActions.clear()
                 },
                 label = { Text(p.name) },
             )
@@ -529,6 +564,19 @@ private fun EditorToolbar(service: TrackPlanService, plans: List<TrackPlan>, pla
             Text("Neues Gleisbild")
         }
         IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.Delete, "Gleisbild löschen") }
+        IconButton(onClick = {
+            val copy = service.duplicatePlan(plan.id)
+            TrackPlanUiState.editPlan.value = copy.id
+            EditorActions.clear()
+            say("„${copy.name}“ angelegt.")
+        }) { Icon(Icons.Filled.ContentCopy, "Gleisbild kopieren") }
+        val index = plans.indexOfFirst { it.id == plan.id }
+        IconButton(enabled = index > 0, onClick = { service.movePlan(plan.id, -1) }) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Gleisbild nach vorn")
+        }
+        IconButton(enabled = index in 0 until plans.lastIndex, onClick = { service.movePlan(plan.id, 1) }) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Gleisbild nach hinten")
+        }
 
         OutlinedTextField(
             value = plan.name,
@@ -625,6 +673,7 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
     val iconSize = (size * 2 / 3).coerceAtLeast(16)
     val tools = listOf(
         Triple(EditTool.Select, "Auswählen", Icons.Outlined.AdsClick),
+        Triple(EditTool.Area, "Bereich", Icons.Outlined.HighlightAlt),
         Triple(EditTool.Rotate, "Drehen", Icons.Outlined.Rotate90DegreesCw),
         Triple(EditTool.Erase, "Entfernen", Icons.Outlined.Delete),
     )
@@ -659,6 +708,12 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
         tools.forEach { (t, label, icon) ->
             item(tool == t, label, { TrackPlanUiState.tool.value = t }) {
                 Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(iconSize.dp))
+            }
+        }
+        val clipboard by TrackPlanUiState.clipboard.collectAsState()
+        if (clipboard.isNotEmpty()) {
+            item(tool == EditTool.Paste, "Einfügen", { TrackPlanUiState.tool.value = EditTool.Paste }) {
+                Icon(Icons.Filled.ContentPaste, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(iconSize.dp))
             }
         }
         item(false, "Richtung", { TrackPlanUiState.placeRotation.value = (rotation + 1).mod(8) }) {
@@ -701,6 +756,13 @@ private fun Palette(modifier: Modifier, vertical: Boolean) {
 private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Modifier) {
     val selected by TrackPlanUiState.selected.collectAsState()
     val tileSize by TrackPlanUiState.tileSize.collectAsState()
+    val area by TrackPlanUiState.area.collectAsState()
+    val tool by TrackPlanUiState.tool.collectAsState()
+    val menu by TrackPlanUiState.editorMenu.collectAsState()
+    val focus = remember { FocusRequester() }
+    // Waehrend des Ziehens: verschobene Kacheln mit Versatz bzw. der aufgezogene Rahmen
+    var dragMove by remember { mutableStateOf<Pair<Set<Pair<Int, Int>>, Pair<Int, Int>>?>(null) }
+    var marquee by remember { mutableStateOf<Footprint?>(null) }
 
     val library = LocalSymbolLibrary.current
     val editorState = TrackState(symbolImage = { symbolImage(it, emptyMap(), emptyMap(), library) })
@@ -712,14 +774,30 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
         val tile = current?.tileAt(x, y)
         // Drehscheiben und Schiebebuehnen sind ueber ihre ganze Flaeche auswaehlbar
         val target = current?.objectAt(x, y)
+        runCatching { focus.requestFocus() }
+        TrackPlanUiState.editorMenu.value = null
         when (val t = TrackPlanUiState.tool.value) {
-            EditTool.Select -> TrackPlanUiState.selected.value = target?.let { it.x to it.y }
+            EditTool.Select -> {
+                TrackPlanUiState.area.value = emptySet()
+                TrackPlanUiState.selected.value = target?.let { it.x to it.y }
+            }
+            // Antippen nimmt eine Kachel in den Bereich auf oder heraus
+            EditTool.Area -> if (target != null) {
+                val cellOf = target.x to target.y
+                val now = TrackPlanUiState.area.value
+                TrackPlanUiState.area.value = if (cellOf in now) now - cellOf else now + cellOf
+                TrackPlanUiState.selected.value = null
+            } else {
+                TrackPlanUiState.area.value = emptySet()
+            }
+            EditTool.Paste -> if (current != null) EditorActions.paste(service, current, x, y)
             EditTool.Rotate -> if (target != null) {
                 service.change(planId) { it.rotate(target.x, target.y) }
                 TrackPlanUiState.selected.value = target.x to target.y
             }
             EditTool.Erase -> if (target != null) {
                 service.change(planId) { it.remove(target.x, target.y) }
+                TrackPlanUiState.area.value -= target.x to target.y
                 if (TrackPlanUiState.selected.value == target.x to target.y) TrackPlanUiState.selected.value = null
             }
             is EditTool.Place -> {
@@ -736,14 +814,59 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
                     val text = if (t.shape == TrackShape.TEXT) "Text" else ""
                     service.change(planId) { it.put(TrackTile(x, y, t.shape, rot, text = text, symbol = symbol)) }
                 }
+                TrackPlanUiState.area.value = emptySet()
                 TrackPlanUiState.selected.value = x to y
+            }
+        }
+    }
+
+    // Ziehen: "Auswählen" verschiebt die Kachel bzw. den Bereich darunter, "Bereich" zieht einen Rahmen auf
+    val drag: ((Pair<Int, Int>, Pair<Int, Int>, DragPhase) -> Unit)? = if (tool != EditTool.Select && tool != EditTool.Area) null else { from, to, phase ->
+        val current = service.plans.value.firstOrNull { it.id == planId }
+        val anchor = current?.objectAt(from.first, from.second)?.let { it.x to it.y }
+        val marked = TrackPlanUiState.area.value
+        val dx = to.first - from.first
+        val dy = to.second - from.second
+        val moving = when {
+            anchor == null -> null
+            anchor in marked -> marked
+            TrackPlanUiState.tool.value == EditTool.Select -> setOf(anchor)
+            else -> null
+        }
+        when {
+            current == null -> Unit
+            moving != null -> when (phase) {
+                DragPhase.MOVE -> dragMove = moving to (dx to dy)
+                DragPhase.END -> {
+                    dragMove = null
+                    if (moving.size == 1 && marked.isEmpty()) TrackPlanUiState.selected.value = anchor
+                    EditorActions.move(service, current, moving, dx, dy)
+                }
+                DragPhase.CANCEL -> dragMove = null
+            }
+            TrackPlanUiState.tool.value == EditTool.Area -> {
+                val rect = Footprint(minOf(from.first, to.first), minOf(from.second, to.second), kotlin.math.abs(dx) + 1, kotlin.math.abs(dy) + 1)
+                when (phase) {
+                    DragPhase.MOVE -> marquee = rect
+                    DragPhase.END -> {
+                        marquee = null
+                        val tiles = current.tilesIn(from.first, from.second, to.first, to.second)
+                        TrackPlanUiState.area.value = tiles.map { it.x to it.y }.toSet()
+                        TrackPlanUiState.selected.value = null
+                        say(if (tiles.isEmpty()) null else "${EditorActions.count(tiles.size)} markiert. Ziehen verschiebt, Entf löscht, Strg+C kopiert.")
+                    }
+                    DragPhase.CANCEL -> marquee = null
+                }
             }
         }
     }
 
     BoxWithConstraints(
         modifier.clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .focusRequester(focus)
+            .onPreviewKeyEvent { EditorActions.onKey(service, planId, it) }
+            .focusable(),
     ) {
         // Platz fuer das Raster ohne Rand (12 dp je Seite)
         val areaWidth = (maxWidth - 24.dp).value
@@ -756,7 +879,24 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())
                 .padding(12.dp),
         ) {
-            TrackPlanView(plan, cell.dp, editorState, Modifier.testTag(EDITOR_GRID_TAG), selected = selected, showGrid = true, onTap = tap)
+            TrackPlanView(
+                plan, cell.dp, editorState, Modifier.testTag(EDITOR_GRID_TAG),
+                selected = selected.takeIf { area.isEmpty() && dragMove == null }, showGrid = true,
+                onContext = { x, y ->
+                    runCatching { focus.requestFocus() }
+                    TrackPlanUiState.editorMenu.value = x to y
+                },
+                marked = dragMove?.first ?: area,
+                markOffset = dragMove?.second ?: (0 to 0),
+                marquee = marquee,
+                onCellDrag = drag,
+                onTap = tap,
+            )
+            menu?.let { (mx, my) ->
+                Box(Modifier.offset(cell.dp * mx, cell.dp * my).size(cell.dp)) {
+                    EditorContextMenu(service, plan, mx to my, onDismiss = { TrackPlanUiState.editorMenu.value = null })
+                }
+            }
         }
         Surface(
             Modifier.align(Alignment.BottomEnd).padding(10.dp),
@@ -800,7 +940,7 @@ private fun ToolButton(label: String, icon: ImageVector, showLabel: Boolean, ena
 }
 
 /** Kacheln, bei denen die Drehung nichts aendert. */
-private val UNROTATED = setOf(TileKind.TEXT, TileKind.SYMBOL, TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.ASPECT, TileKind.TURNTABLE)
+private val UNROTATED = setOf(TileKind.TEXT, TileKind.SYMBOL, TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.ASPECT, TileKind.TURNTABLE, TileKind.CLOCK)
 
 /** Kennung eines Gleisbilds im Betrieb fuer Oberflaechentests, gefolgt von der Gleisbild-Id. */
 const val PLAN_VIEW_TAG = "gleisbild-betrieb-"
@@ -864,7 +1004,8 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
             if (tile == null) {
                 Text(
                     "Gleisform wählen und ins Raster tippen. Dieselbe Form erneut antippen dreht sie um 45°. " +
-                        "Mit „Auswählen“ eine Kachel antippen, um Adresse oder Rückmelder einzutragen.",
+                        "Mit „Auswählen“ eine Kachel antippen, um Adresse oder Rückmelder einzutragen, oder ziehen, um sie zu verschieben. " +
+                        "„Bereich“ markiert mehrere Kacheln zum Verschieben, Kopieren und Löschen; Rechtsklick bzw. langes Drücken öffnet das Menü.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -944,6 +1085,10 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                     Spacer(Modifier.width(6.dp))
                     Text("Entfernen")
                 }
+            }
+            if (tile.shape.hasAddress || tile.shape.kind == TileKind.FEEDBACK || tile.shape.kind == TileKind.MEASURE) {
+                Spacer(Modifier.size(8.dp))
+                ReuseObject(service, plan, tile, set)
             }
             if (tile.shape.kind == TileKind.SIGNAL) {
                 Spacer(Modifier.size(8.dp))

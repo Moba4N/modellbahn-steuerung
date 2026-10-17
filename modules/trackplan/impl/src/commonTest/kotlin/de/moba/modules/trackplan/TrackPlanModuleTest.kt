@@ -8,7 +8,9 @@ import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.BlockException
 import de.moba.modules.trackplan.api.BlockReservation
 import de.moba.modules.trackplan.api.LicenseRequiredException
+import de.moba.modules.trackplan.api.ModelClockState
 import de.moba.modules.trackplan.api.TableCommand
+import de.moba.modules.trackplan.api.measureKey
 import de.moba.modules.trackplan.api.isOn
 import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
@@ -42,6 +44,7 @@ class TrackPlanModuleTest {
         license: LicenseInfo,
         store: TrackPlanStore = MemoryStore(),
         station: SimulatorStation = SimulatorStation(),
+        millis: () -> Long = { testScheduler.currentTime },
     ): TrackPlanService {
         val host = ModuleHost(
             station,
@@ -49,7 +52,7 @@ class TrackPlanModuleTest {
             license,
             CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
         )
-        host.register(TrackPlanModule(TrackPlanRepository(store)))
+        host.register(TrackPlanModule(TrackPlanRepository(store), millis))
         station.connect()
         host.startAll()
         advanceUntilIdle()
@@ -281,5 +284,69 @@ class TrackPlanModuleTest {
         service.reserve(listOf(3 to 3), a)
         service.releaseAll()
         assertTrue(service.reservations.value.isEmpty())
+    }
+
+    @Test
+    fun measurementGivesSpeedInBothDirections() = runTest {
+        val station = SimulatorStation()
+        var now = 0L
+        val service = start(LicenseInfo.FREE, station = station, millis = { now })
+        val measure = TrackTile(3, 3, TrackShape.MEASUREMENT, 2)
+            .withProp(AccessoryProps.MEASURE_START, "3.1").withProp(AccessoryProps.MEASURE_END, "3.2")
+            .withProp(AccessoryProps.MEASURE_LENGTH, "1000")
+        val plan = service.plans.value.first().put(measure)
+        service.update(plan)
+        service.placeTrain(3 to 1, 12)
+        val key = measureKey(plan.id, measure)
+
+        station.simulateFeedback(3, 1, occupied = true)
+        now = 4_000
+        station.simulateFeedback(3, 2, occupied = true)
+        advanceUntilIdle()
+        val m = service.measurements.value.getValue(key)
+        // 1000 mm in 4 s = 250 mm/s, in H0 also 250 * 87 * 3,6 / 1000 = 78,3 km/h
+        assertEquals(250.0, m.modelMmPerSecond, 0.01)
+        assertEquals(78.3, m.kmh, 0.01)
+        assertTrue(m.forward)
+        assertEquals(12, m.address)
+
+        station.simulateFeedback(3, 1, occupied = false)
+        station.simulateFeedback(3, 2, occupied = false)
+        station.simulateFeedback(3, 2, occupied = true)
+        now = 6_000
+        station.simulateFeedback(3, 1, occupied = true)
+        advanceUntilIdle()
+        assertFalse(service.measurements.value.getValue(key).forward)
+        assertEquals(2_000, service.measurements.value.getValue(key).millis)
+    }
+
+    @Test
+    fun modelClockRunsFasterAndStops() = runTest {
+        var now = 0L
+        val service = start(LicenseInfo.FREE, millis = { now })
+        service.setClock(7, 30)
+        service.setClockFactor(6)
+        service.startClock()
+        now = 10 * 60_000L
+        assertEquals("08:30", ModelClockState.format(service.clock.value.minutesAt(now)))
+        service.stopClock()
+        now += 60 * 60_000L
+        assertEquals("08:30", ModelClockState.format(service.clock.value.minutesAt(now)))
+        service.setClock(23, 50)
+        service.startClock()
+        now += 5 * 60_000L
+        assertEquals("00:20", ModelClockState.format(service.clock.value.minutesAt(now)))
+    }
+
+    @Test
+    fun plansAreDuplicatedAndReordered() = runTest {
+        val service = start(LicenseInfo.FREE)
+        val first = service.plans.value.first()
+        val copy = service.duplicatePlan(first.id)
+        assertEquals("${first.name} (Kopie)", copy.name)
+        assertEquals(first.tiles, copy.tiles)
+        assertEquals("${first.name} (Kopie 2)", service.duplicatePlan(first.id).name)
+        service.movePlan(copy.id, -5)
+        assertEquals(copy.id, service.plans.value.first().id)
     }
 }

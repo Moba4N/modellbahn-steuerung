@@ -56,6 +56,12 @@ object AccessoryProps {
     const val CMD_STEP_CW = "befehl.rechts"
     const val CMD_STEP_CCW = "befehl.links"
 
+    /** Messstrecke: Start- und Endmelder ("modul.kontakt"), Laenge dazwischen in mm, Massstab (87 = H0). */
+    const val MEASURE_START = "messung.start"
+    const val MEASURE_END = "messung.ende"
+    const val MEASURE_LENGTH = "messung.laenge"
+    const val SCALE = "massstab"
+
     /** Steuern: Dauer je Positionsschritt in Millisekunden, solange kein Fertig-Melder gesetzt ist. */
     const val STEP_TIME = "schrittzeit"
 }
@@ -192,3 +198,59 @@ fun TrackTile.block(): FeedbackRef? {
 fun List<TrackPlan>.blockName(block: FeedbackRef): String =
     asSequence().flatMap { it.tiles }.firstOrNull { it.block() == block }?.prop(AccessoryProps.NAME)?.takeIf { it.isNotBlank() }
         ?: "Block ${block.first}.${block.second}"
+
+/** Einstellungen einer Messstrecke mit Vorgaben (H0, 1000 mm). */
+data class MeasureConfig(val start: FeedbackRef?, val end: FeedbackRef?, val lengthMm: Int, val scale: Int) {
+    companion object {
+        fun of(tile: TrackTile) = MeasureConfig(
+            start = FeedbackList.parse(tile.prop(AccessoryProps.MEASURE_START)).firstOrNull(),
+            end = FeedbackList.parse(tile.prop(AccessoryProps.MEASURE_END)).firstOrNull(),
+            lengthMm = tile.prop(AccessoryProps.MEASURE_LENGTH).toIntOrNull()?.coerceIn(10, 100_000) ?: 1000,
+            scale = tile.prop(AccessoryProps.SCALE).toIntOrNull()?.coerceIn(1, 1000) ?: 87,
+        )
+    }
+}
+
+/**
+ * Ergebnis einer Messung: Fahrzeit zwischen den Meldern, daraus Modell- und Vorbildgeschwindigkeit.
+ * [forward] = vom Start- zum Endmelder.
+ */
+data class SpeedMeasurement(val millis: Long, val lengthMm: Int, val scale: Int, val forward: Boolean, val address: Int? = null) {
+    val modelMmPerSecond: Double get() = lengthMm * 1000.0 / millis.coerceAtLeast(1)
+
+    /** Vorbildgeschwindigkeit in km/h: Modellgeschwindigkeit mal Massstab. */
+    val kmh: Double get() = modelMmPerSecond * scale * 3.6 / 1000.0
+}
+
+/**
+ * Modellzeit: laeuft [factor]-mal so schnell wie die echte Zeit. Gespeichert als Modellzeit [baseMinutes]
+ * (Minuten seit Mitternacht) zum echten Zeitpunkt [baseMillis] (siehe [ModelTime.realMillis]).
+ */
+data class ModelClockState(
+    val baseMinutes: Double = 6 * 60.0,
+    val baseMillis: Long = 0,
+    val factor: Int = 6,
+    val running: Boolean = false,
+) {
+    /** Modellzeit in Minuten seit Mitternacht (0 bis unter 1440) zum echten Zeitpunkt [realMillis]. */
+    fun minutesAt(realMillis: Long): Double {
+        val elapsed = if (running) (realMillis - baseMillis).coerceAtLeast(0) / 60_000.0 * factor else 0.0
+        return (baseMinutes + elapsed).mod(24 * 60.0)
+    }
+
+    companion object {
+        const val MAX_FACTOR = 60
+
+        /** "07:30" aus Minuten seit Mitternacht. */
+        fun format(minutes: Double): String {
+            val m = minutes.toInt().mod(24 * 60)
+            return "${(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}"
+        }
+    }
+}
+
+/** Gemeinsame Uhr fuer Modellzeit und Messungen: Millisekunden seit Programmstart. */
+object ModelTime {
+    private val start = kotlin.time.TimeSource.Monotonic.markNow()
+    fun realMillis(): Long = start.elapsedNow().inWholeMilliseconds
+}

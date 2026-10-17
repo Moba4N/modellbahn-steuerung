@@ -60,6 +60,9 @@ import de.moba.modules.trackplan.api.block
 import de.moba.modules.trackplan.api.blockName
 import de.moba.modules.trackplan.api.displayName
 import de.moba.modules.trackplan.api.isOn
+import de.moba.modules.trackplan.api.ModelClockState
+import de.moba.modules.trackplan.api.ModelTime
+import de.moba.modules.trackplan.api.measureKey
 import de.moba.ui.shell.MobaApp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -244,6 +247,8 @@ internal fun PlanContextMenu(app: MobaApp, service: TrackPlanService, target: Co
     val trains by service.trains.collectAsState()
     val reservations by service.reservations.collectAsState()
     val plans by service.plans.collectAsState()
+    val measurements by service.measurements.collectAsState()
+    val clock by service.clock.collectAsState()
     val library = LocalSymbolLibrary.current
     val tile = target.tile
     fun act(action: suspend () -> Unit) {
@@ -338,6 +343,25 @@ internal fun PlanContextMenu(app: MobaApp, service: TrackPlanService, target: Co
                 item("Steuerung öffnen") {
                     onDismiss()
                     TrackPlanUiState.openTable.value = target.planId to (tile.x to tile.y)
+                }
+            }
+            tile.shape.kind == TileKind.MEASURE -> {
+                header(tile.displayName())
+                val m = measurements[measureKey(target.planId, tile)]
+                Text(
+                    m?.let { measurementText(it, layout.locos.associate { l -> l.address to l.name }) } ?: "Noch keine Messung",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
+            tile.shape.kind == TileKind.CLOCK -> {
+                header("Modellzeit ${ModelClockState.format(clock.minutesAt(ModelTime.realMillis()))}")
+                if (clock.running) item("Uhr anhalten") { act { service.stopClock() } }
+                else item("Uhr starten") { act { service.startClock() } }
+                item("Uhr stellen …") {
+                    onDismiss()
+                    TrackPlanUiState.clockDialog.value = true
                 }
             }
             else -> header(tile.shape.label)

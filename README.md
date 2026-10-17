@@ -186,6 +186,22 @@ Zug einsetzen, Zug entfernen und Block freigeben, bei Weichen die Stellungen, be
 alle Bilder, bei schaltbarem Zubehoer ein/aus, bei Drehscheiben die Steuerung. "Alle Bloecke freigeben" steht
 in jedem Kontextmenue, solange etwas reserviert ist.
 
+### Messung, Modellzeit und Bearbeiten
+
+- **Messstrecke**: Gleisform "Messstrecke" mit Start- und Endmelder, Laenge in mm und Massstab (Reiter Messung).
+  Faehrt ein Zug vom einen zum anderen Melder (in beide Richtungen), zeigt das Gleisbild die Vorbildgeschwindigkeit
+  als Schild ueber der Strecke; das Kontextmenue zeigt km/h, mm/s, Fahrzeit, Richtung und Zug.
+- **Modellzeit-Uhr**: Gleisform "Modellzeit-Uhr" (1 bis 6 Felder gross) und die Uhrzeit oben im Betrieb. Ein Klick
+  oeffnet den Dialog: Uhr stellen, Zeitraffer x1 bis x60, Starten und Anhalten.
+- **Bearbeiten**: Mit "Auswaehlen" eine Kachel ziehen verschiebt sie. "Bereich" zieht einen Rahmen auf (oder nimmt
+  Kacheln per Antippen dazu); der markierte Bereich laesst sich ziehen, mit den Pfeilen oder Pfeiltasten verschieben,
+  drehen (R), kopieren (Strg+C), ausschneiden (Strg+X), loeschen (Entf) und mit "Einfuegen" (Strg+V) an anderer Stelle
+  oder in einem anderen Gleisbild einsetzen. Rechtsklick bzw. langes Druecken oeffnet dieselben Befehle als Menue.
+- **Steuerobjekte wiederverwenden**: Wie in iTrain kann dieselbe Weiche, dasselbe Signal oder derselbe Block an mehreren
+  Stellen und in mehreren Gleisbildern liegen. "Vorhandenes Objekt uebernehmen" kopiert Adresse, Melder und
+  Einstellungen; die Eigenschaften zeigen, wo das Objekt noch liegt, und "Auf alle Stellen uebertragen" gleicht sie an.
+- **Gleisbilder**: neu anlegen, umbenennen, Groesse aendern, kopieren und in der Reihenfolge verschieben.
+
 ### Zubehoer wie in iTrain
 
 Weitere Formen in der Leiste "Gleisformen": Zubehoer mit Bildern (Aspekt), Relais, Licht, Sound, Bahnuebergang,

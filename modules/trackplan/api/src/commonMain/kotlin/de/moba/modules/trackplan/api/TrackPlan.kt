@@ -24,7 +24,7 @@ enum class Branch { MAIN, LEFT, RIGHT }
  * Was eine Kachel ausser Gleis noch traegt. Zubehoer wie in iTrain: [ASPECT] (Zubehoer mit mehreren Bildern),
  * [RELAY], [LIGHT], [SOUND], [GATE] (Bahnuebergang), [TURNTABLE] und [TRANSFER] (Schiebebuehne).
  */
-enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT, SYMBOL, ASPECT, RELAY, LIGHT, SOUND, GATE, TURNTABLE, TRANSFER }
+enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT, SYMBOL, ASPECT, RELAY, LIGHT, SOUND, GATE, TURNTABLE, TRANSFER, MEASURE, CLOCK }
 
 /**
  * Alle Gleisformen des Gleisbilds. Die Segmente gelten fuer Drehung 0;
@@ -82,6 +82,8 @@ enum class TrackShape(val label: String, val kind: TileKind, val segments: List<
     LEVEL_CROSSING("Bahnübergang", TileKind.GATE, listOf(TrackSegment(0, 4))),
     TURNTABLE("Drehscheibe", TileKind.TURNTABLE, emptyList()),
     TRANSFER_TABLE("Schiebebühne", TileKind.TRANSFER, emptyList()),
+    MEASUREMENT("Messstrecke", TileKind.MEASURE, listOf(TrackSegment(0, 4))),
+    CLOCK("Modellzeit-Uhr", TileKind.CLOCK, emptyList()),
     ;
 
     /**
@@ -95,6 +97,9 @@ enum class TrackShape(val label: String, val kind: TileKind, val segments: List<
 
     /** Drehscheibe oder Schiebebuehne: Buehne mit Gleisanschluessen, gesteuert ueber [TableConfig]. */
     val isTable: Boolean get() = kind == TileKind.TURNTABLE || kind == TileKind.TRANSFER
+
+    /** Bedeckt mehr als ein Feld (Drehscheibe, Schiebebuehne, Uhr). */
+    val isLarge: Boolean get() = isTable || kind == TileKind.CLOCK
 
     /** Dreiwegweichen brauchen zwei Adressen: [address] fuer links, [address] + 1 fuer rechts. */
     val addressCount: Int get() = if (this == TURNOUT_THREE_WAY) 2 else 1
@@ -141,8 +146,12 @@ data class TrackTile(
         TileKind.TRANSFER -> TableConfig.of(this).let { c ->
             if (c.vertical) Footprint(x, y, c.positions, c.length) else Footprint(x, y, c.length, c.positions)
         }
+        TileKind.CLOCK -> clockSize().let { n -> Footprint(x, y, n, n) }
         else -> Footprint(x, y, 1, 1)
     }
+
+    /** Groesse der Modellzeit-Uhr in Rasterfeldern (1 bis 6, anfangs 2). */
+    fun clockSize(): Int = prop(AccessoryProps.SIZE).toIntOrNull()?.coerceIn(1, 6) ?: 2
 }
 
 /** Rechteck aus Rasterzellen. */
@@ -161,7 +170,38 @@ data class TrackPlan(
     fun tileAt(x: Int, y: Int): TrackTile? = tiles.firstOrNull { it.x == x && it.y == y }
 
     /** Kachel an der Zelle oder, wenn dort keine liegt, eine Drehscheibe/Schiebebuehne, die die Zelle bedeckt. */
-    fun objectAt(x: Int, y: Int): TrackTile? = tileAt(x, y) ?: tiles.lastOrNull { it.shape.isTable && (x to y) in it.footprint() }
+    fun objectAt(x: Int, y: Int): TrackTile? = tileAt(x, y) ?: tiles.lastOrNull { it.shape.isLarge && (x to y) in it.footprint() }
+
+    /** Kacheln, deren Feld im Rechteck von ([x1], [y1]) bis ([x2], [y2]) liegt (Ecken in beliebiger Reihenfolge). */
+    fun tilesIn(x1: Int, y1: Int, x2: Int, y2: Int): List<TrackTile> {
+        val xs = minOf(x1, x2)..maxOf(x1, x2)
+        val ys = minOf(y1, y2)..maxOf(y1, y2)
+        return tiles.filter { it.x in xs && it.y in ys }
+    }
+
+    /**
+     * Verschiebt die Kacheln an [cells] um ([dx], [dy]). Was am Ziel liegt und nicht mitwandert, wird ersetzt.
+     * @return `null`, wenn eine Kachel aus dem Raster fiele
+     */
+    fun moveTiles(cells: Set<Pair<Int, Int>>, dx: Int, dy: Int): TrackPlan? {
+        val moving = tiles.filter { (it.x to it.y) in cells }
+        if (moving.isEmpty() || dx == 0 && dy == 0) return this
+        val moved = moving.map { it.copy(x = it.x + dx, y = it.y + dy) }
+        if (moved.any { it.x !in 0 until width || it.y !in 0 until height }) return null
+        val targets = moved.map { it.x to it.y }.toSet()
+        val rest = tiles.filter { (it.x to it.y) !in cells && (it.x to it.y) !in targets }
+        return copy(tiles = rest + moved)
+    }
+
+    /** Entfernt alle Kacheln an [cells]. */
+    fun removeAll(cells: Set<Pair<Int, Int>>) = copy(tiles = tiles.filterNot { (it.x to it.y) in cells })
+
+    /**
+     * Fuegt kopierte Kacheln ein; [clip] liegt relativ zu (0, 0), die linke obere Ecke landet auf ([x], [y]).
+     * Was ausserhalb des Rasters landen wuerde, faellt weg.
+     */
+    fun paste(clip: List<TrackTile>, x: Int, y: Int): TrackPlan =
+        clip.fold(this) { plan, t -> plan.put(t.copy(x = t.x + x, y = t.y + y)) }
 
     /** Setzt oder ersetzt die Kachel an ihrer Position. Ausserhalb des Rasters passiert nichts. */
     fun put(tile: TrackTile): TrackPlan {

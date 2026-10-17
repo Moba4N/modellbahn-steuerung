@@ -36,6 +36,12 @@ interface TrackPlanService {
     /** @throws LicenseRequiredException ohne Abo */
     fun save()
 
+    /** Legt eine Kopie des Gleisbilds [id] an ("Name (Kopie)") und haengt sie hinten an. */
+    fun duplicatePlan(id: String): TrackPlan
+
+    /** Verschiebt das Gleisbild [id] in der Reihenfolge um [delta] Plaetze (negativ = nach vorn). */
+    fun movePlan(id: String, delta: Int)
+
     /** Blendet ein Gleisbild ein oder aus. @throws LicenseRequiredException, wenn schon [maxVisiblePlans] sichtbar sind */
     fun toggleVisible(id: String)
 
@@ -109,7 +115,25 @@ interface TrackPlanService {
 
     /** Gibt alle Bloecke frei. */
     fun releaseAll()
+
+    // ---------------------------------------------------------- Messung und Modellzeit
+
+    /** Letzte Messung je Messstrecke, Schluessel "<gleisbild-id>/<x>,<y>" (siehe [measureKey]). */
+    val measurements: StateFlow<Map<String, SpeedMeasurement>>
+
+    val clock: StateFlow<ModelClockState>
+
+    /** Stellt die Modellzeit auf [hours]:[minutes]. */
+    fun setClock(hours: Int, minutes: Int)
+
+    /** Zeitraffer, z. B. 6 = sechsmal so schnell wie echt (1 bis [ModelClockState.MAX_FACTOR]). */
+    fun setClockFactor(factor: Int)
+
+    fun startClock()
+    fun stopClock()
 }
+
+fun measureKey(planId: String, tile: TrackTile) = "$planId/${tile.x},${tile.y}"
 
 /** Wer einen Block reserviert hat: [owner] als Kennung (z. B. "fs:<id>"), [label] fuer die Anzeige. */
 data class BlockReservation(val owner: String, val label: String)

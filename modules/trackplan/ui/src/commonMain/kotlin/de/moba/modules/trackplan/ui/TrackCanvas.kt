@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -41,6 +42,9 @@ import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.Branch
 import de.moba.modules.trackplan.api.FeedbackRef
 import de.moba.modules.trackplan.api.Footprint
+import de.moba.modules.trackplan.api.ModelClockState
+import de.moba.modules.trackplan.api.SpeedMeasurement
+import de.moba.modules.trackplan.api.measureKey
 import de.moba.modules.trackplan.api.block
 import de.moba.modules.trackplan.api.TableConfig
 import de.moba.modules.trackplan.api.aspectNames
@@ -57,6 +61,7 @@ import de.moba.ui.shell.Moba
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -119,7 +124,14 @@ internal class TrackState(
     val trains: Map<FeedbackRef, String> = emptyMap(),
     /** Reservierte Bloecke. */
     val reserved: Set<FeedbackRef> = emptySet(),
+    /** Letzte Messung je Messstrecke (Schluessel aus [measureKey]). */
+    val measurements: Map<String, SpeedMeasurement> = emptyMap(),
+    /** Modellzeit in Minuten seit Mitternacht fuer Uhren; `null` = Uhr zeigt 10:10 wie im Katalog. */
+    val clockMinutes: Double? = null,
 )
+
+/** Abschnitt einer Ziehbewegung im Editor. */
+internal enum class DragPhase { MOVE, END, CANCEL }
 
 /**
  * Zeichnet ein Gleisbild mit festen Kachelgroessen. [onTap] bekommt die angetippte Rasterzelle.
@@ -135,6 +147,13 @@ internal fun TrackPlanView(
     showGrid: Boolean = false,
     /** Kontextmenue: Rechtsklick (Windows) oder langes Druecken (Android); `null` = keins. */
     onContext: ((x: Int, y: Int) -> Unit)? = null,
+    /** Markierte Kacheln (Editor), um [markOffset] verschoben hervorgehoben, z. B. waehrend sie gezogen werden. */
+    marked: Set<Pair<Int, Int>> = emptySet(),
+    markOffset: Pair<Int, Int> = 0 to 0,
+    /** Rahmen, der gerade aufgezogen wird. */
+    marquee: Footprint? = null,
+    /** Ziehen im Raster (Editor): Startzelle, aktuelle Zelle und Abschnitt; `null` = Ziehen scrollt. */
+    onCellDrag: ((from: Pair<Int, Int>, to: Pair<Int, Int>, phase: DragPhase) -> Unit)? = null,
     onTap: (x: Int, y: Int) -> Unit = { _, _ -> },
 ) {
     val colors = trackColors()
@@ -144,6 +163,7 @@ internal fun TrackPlanView(
     val context by rememberUpdatedState(onContext)
     val current by rememberUpdatedState(plan)
     val currentState by rememberUpdatedState(state)
+    val cellDrag by rememberUpdatedState(onCellDrag)
     // Zuege mit der Maus bzw. dem Finger von Block zu Block ziehen (nur im Betrieb)
     val layer = LocalDragLayer.current?.takeIf { state.operating }
     fun cellOf(o: Offset): Pair<Int, Int>? {
@@ -151,6 +171,7 @@ internal fun TrackPlanView(
         val y = (o.y / cellPx).toInt()
         return if (o.x >= 0 && o.y >= 0 && x in 0 until current.width && y in 0 until current.height) x to y else null
     }
+    fun clampedCell(o: Offset) = (o.x / cellPx).toInt().coerceIn(0, current.width - 1) to (o.y / cellPx).toInt().coerceIn(0, current.height - 1)
     Canvas(
         modifier
             .size(cell * plan.width, cell * plan.height)
@@ -175,6 +196,27 @@ internal fun TrackPlanView(
                     }
                 }
             }
+            .then(
+                if (onCellDrag == null) Modifier else Modifier.pointerInput(cellPx) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (down.isConsumed) return@awaitEachGesture
+                        val from = cellOf(down.position) ?: return@awaitEachGesture
+                        val start = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
+                        var last = clampedCell(start.position)
+                        cellDrag?.invoke(from, last, DragPhase.MOVE)
+                        val done = drag(start.id) { change ->
+                            change.consume()
+                            val now = clampedCell(change.position)
+                            if (now != last) {
+                                last = now
+                                cellDrag?.invoke(from, now, DragPhase.MOVE)
+                            }
+                        }
+                        cellDrag?.invoke(from, last, if (done) DragPhase.END else DragPhase.CANCEL)
+                    }
+                },
+            )
             .then(
                 if (layer == null) Modifier else Modifier.pointerInput(layer, cellPx) {
                     awaitEachGesture {
@@ -210,6 +252,32 @@ internal fun TrackPlanView(
                 drawTrainLabel(label, Offset((tile.x + 0.5f) * cellPx, (tile.y + 0.5f) * cellPx), cellPx, colors, measurer)
             }
         }
+        if (state.measurements.isNotEmpty()) {
+            for (tile in plan.tiles) {
+                if (tile.shape.kind != TileKind.MEASURE) continue
+                val m = state.measurements[measureKey(plan.id, tile)] ?: continue
+                drawMeasureLabel("${m.kmh.roundToInt()} km/h", Offset((tile.x + 0.5f) * cellPx, (tile.y + 0.5f) * cellPx), cellPx, colors, measurer)
+            }
+        }
+        val (ox, oy) = markOffset
+        for ((mx, my) in marked) {
+            val area = plan.tileAt(mx, my)?.footprint() ?: Footprint(mx, my, 1, 1)
+            drawRoundRect(
+                colors.selection.copy(alpha = 0.22f),
+                topLeft = Offset((area.x + ox) * cellPx, (area.y + oy) * cellPx),
+                size = Size(area.width * cellPx, area.height * cellPx),
+                cornerRadius = CornerRadius(cellPx * 0.12f),
+            )
+        }
+        marquee?.let { m ->
+            val stroke = (cellPx * 0.05f).coerceAtLeast(1.5f)
+            drawRect(
+                colors.selection,
+                topLeft = Offset(m.x * cellPx, m.y * cellPx),
+                size = Size(m.width * cellPx, m.height * cellPx),
+                style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(stroke * 3, stroke * 2))),
+            )
+        }
         selected?.let { (sx, sy) ->
             val area = plan.tileAt(sx, sy)?.footprint() ?: Footprint(sx, sy, 1, 1)
             drawRoundRect(
@@ -237,6 +305,8 @@ internal fun ShapePreview(tile: TrackTile, size: Dp, state: TrackState = TrackSt
             val area = small.footprint()
             val cell = this.size.width / maxOf(area.width, area.height)
             drawTile(small, -area.x * cell, -area.y * cell, cell, colors, state, measurer)
+        } else if (tile.shape.kind == TileKind.CLOCK) {
+            drawTile(tile.copy(x = 0, y = 0).withProp(AccessoryProps.SIZE, "1"), 0f, 0f, this.size.width, colors, state, measurer)
         } else {
             drawTile(tile.copy(x = 0, y = 0), 0f, 0f, this.size.width, colors, state, measurer)
         }
@@ -291,6 +361,7 @@ internal fun DrawScope.drawTile(
     when (kind) {
         TileKind.TURNTABLE -> return drawTurntable(tile, left, top, cell, colors, state)
         TileKind.TRANSFER -> return drawTransferTable(tile, left, top, cell, colors, state)
+        TileKind.CLOCK -> return drawClock(tile, left, top, cell, colors, state, measurer)
         TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.ASPECT -> return drawAccessory(tile, left, top, cell, colors, state)
         else -> Unit
     }
@@ -350,6 +421,15 @@ internal fun DrawScope.drawTile(
             strokeWidth = width * 1.3f,
             cap = StrokeCap.Round,
         )
+        TileKind.MEASURE -> {
+            // Messstrecke: zwei Marken quer zum Gleis, dazwischen ein Massstab
+            for (sign in listOf(1f, -1f)) {
+                val p = c + along * (cell * 0.3f * sign)
+                drawLine(colors.selection, p + across * (cell * 0.24f), p - across * (cell * 0.24f), strokeWidth = width * 0.6f, cap = StrokeCap.Round)
+            }
+            val ruler = c + across * (cell * 0.3f)
+            drawLine(colors.selection, ruler - along * (cell * 0.3f), ruler + along * (cell * 0.3f), strokeWidth = width * 0.35f)
+        }
         TileKind.UNCOUPLER -> drawLine(
             colors.uncoupler,
             c + across * (cell * 0.26f),
@@ -580,6 +660,51 @@ private fun DrawScope.drawTransferTable(tile: TrackTile, left: Float, top: Float
     val start = center(position ?: config.tracks.first())
     drawLine(bridge.copy(alpha = 0.35f), start + along * inset, start + along * (length - inset), strokeWidth = cell * 0.62f)
     drawLine(bridge, start + along * inset, start + along * (length - inset), strokeWidth = width)
+}
+
+/**
+ * Modellzeit-Uhr ueber [TrackTile.clockSize] Felder: Zifferblatt mit Stunden- und Minutenzeiger, darunter digital.
+ */
+private fun DrawScope.drawClock(tile: TrackTile, left: Float, top: Float, cell: Float, colors: TrackColors, state: TrackState, measurer: TextMeasurer) {
+    val n = tile.clockSize()
+    val side = n * cell
+    val c = Offset(left + side / 2, top + side / 2)
+    val r = side * 0.46f
+    val line = (cell * 0.06f).coerceAtLeast(1f)
+    drawCircle(colors.background, r, c)
+    drawCircle(colors.track, r, c, style = Stroke(line * 1.4f))
+    for (i in 0 until 12) {
+        val a = i * PI / 6
+        val d = Offset(sin(a).toFloat(), -cos(a).toFloat())
+        drawLine(colors.track, c + d * (r * if (i % 3 == 0) 0.76f else 0.84f), c + d * (r * 0.92f), strokeWidth = line * if (i % 3 == 0) 1.4f else 0.8f)
+    }
+    val minutes = state.clockMinutes ?: (10 * 60 + 10.0)
+    if (n >= 2) {
+        val style = TextStyle(color = colors.text, fontSize = (side * 0.12f).toSp(), fontWeight = FontWeight.SemiBold)
+        val layout = measurer.measure(ModelClockState.format(minutes), style, maxLines = 1)
+        drawText(layout, topLeft = Offset(c.x - layout.size.width / 2f, c.y + r * 0.32f))
+    }
+    fun hand(angle: Double, length: Float, width: Float, color: Color) {
+        val d = Offset(sin(angle).toFloat(), -cos(angle).toFloat())
+        drawLine(color, c - d * (length * 0.15f), c + d * length, strokeWidth = width, cap = StrokeCap.Round)
+    }
+    hand((minutes / 60.0 % 12) * PI / 6, r * 0.5f, line * 2.2f, colors.track)
+    hand((minutes % 60) * PI / 30, r * 0.78f, line * 1.4f, colors.track)
+    // Sekundenzeiger der Modellzeit nur, wenn die Uhr laeuft
+    if (state.operating && state.clockMinutes != null) hand((minutes * 60 % 60) * PI / 30, r * 0.82f, line * 0.6f, colors.signalRed)
+    drawCircle(colors.track, line * 1.6f, c)
+}
+
+/** Gemessene Geschwindigkeit als Schild ueber der Messstrecke. */
+internal fun DrawScope.drawMeasureLabel(label: String, center: Offset, cell: Float, colors: TrackColors, measurer: TextMeasurer) {
+    val style = TextStyle(color = colors.background, fontSize = (cell * 0.32f).coerceAtLeast(9f * density).toSp(), fontWeight = FontWeight.SemiBold)
+    val layout = measurer.measure(label, style, maxLines = 1)
+    val padX = cell * 0.14f
+    val w = layout.size.width + 2 * padX
+    val h = layout.size.height + cell * 0.06f
+    val topLeft = Offset(center.x - w / 2, center.y - cell * 0.5f - h)
+    drawRoundRect(colors.selection, topLeft, Size(w, h), CornerRadius(h * 0.3f))
+    drawText(layout, topLeft = Offset(center.x - layout.size.width / 2f, topLeft.y + (h - layout.size.height) / 2f))
 }
 
 /** Zugname als Schild ueber dem Block. */

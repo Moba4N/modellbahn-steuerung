@@ -49,6 +49,7 @@ import de.moba.modules.trackplan.api.AccessoryCommand
 import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.FeedbackList
 import de.moba.modules.trackplan.api.FeedbackRef
+import de.moba.modules.trackplan.api.MeasureConfig
 import de.moba.modules.trackplan.api.SignalAddressing
 import de.moba.modules.trackplan.api.TRACKPLAN_MODULE_ID
 import de.moba.modules.trackplan.api.TableCommand
@@ -73,6 +74,7 @@ private enum class AccessoryTab(val label: String) {
     FEEDBACK("Rückmelder"),
     BLOCK("Block"),
     COMMANDS("Steuern"),
+    MEASURE("Messung"),
 }
 
 private fun tabsFor(tile: TrackTile): List<AccessoryTab> = when (tile.shape.kind) {
@@ -84,6 +86,8 @@ private fun tabsFor(tile: TrackTile): List<AccessoryTab> = when (tile.shape.kind
         AccessoryTab.GENERAL, AccessoryTab.DECODER, AccessoryTab.ACCESSORY,
         AccessoryTab.FEEDBACK, AccessoryTab.BLOCK, AccessoryTab.COMMANDS,
     )
+    TileKind.MEASURE -> listOf(AccessoryTab.GENERAL, AccessoryTab.MEASURE)
+    TileKind.CLOCK -> listOf(AccessoryTab.GENERAL)
     else -> emptyList()
 }
 
@@ -113,6 +117,7 @@ internal fun AccessoryTabs(tile: TrackTile, set: (TrackTile) -> Unit) {
                 AccessoryTab.FEEDBACK -> TableFeedbackTab(tile, set)
                 AccessoryTab.BLOCK -> TableBlockTab(tile, set)
                 AccessoryTab.COMMANDS -> TableCommandsTab(tile, set)
+                AccessoryTab.MEASURE -> MeasureTab(tile, set)
             }
         }
     }
@@ -187,10 +192,15 @@ private fun GeneralTab(tile: TrackTile, set: (TrackTile) -> Unit) {
         if (tile.shape.kind == TileKind.ASPECT) {
             PropField("Bilder, durch | getrennt", tile, AccessoryProps.ASPECTS, set, Modifier.width(360.dp), placeholder = "Aus|Blinken|Dauerlicht")
         }
+        if (tile.shape.kind == TileKind.CLOCK) {
+            PropField("Größe in Feldern (1–6)", tile, AccessoryProps.SIZE, set, Modifier.width(200.dp), number = true, placeholder = "2")
+        }
     }
     when (tile.shape.kind) {
         TileKind.ASPECT -> Hint("${tile.aspectNames().size} Bilder, höchstens ${SignalAddressing.MAX_ASPECTS}. Im Betrieb wählt ein Klick das Bild aus einer Liste.")
         TileKind.GATE -> Hint("Eingeschaltet = Schranken geschlossen. Im Reiter Steuerung schließen Melder ihn automatisch.")
+        TileKind.MEASURE -> Hint("Misst die Fahrzeit zwischen Start- und Endmelder (Reiter Messung) in beiden Richtungen und zeigt die Vorbildgeschwindigkeit.")
+        TileKind.CLOCK -> Hint("Zeigt die Modellzeit. Im Betrieb stellt ein Klick die Uhr, den Zeitraffer und Start/Stopp.")
         TileKind.UNCOUPLER -> Hint("Ein Klick im Betrieb gibt einen Impuls; die Dauer steht im Reiter Steuerung.")
         else -> Hint("Ein Klick im Betrieb schaltet ein oder aus.")
     }
@@ -490,3 +500,24 @@ object TrackPlanTrains : ModuleEffect {
         }
     }
 }
+
+// ---------------------------------------------------------------- Messstrecke
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MeasureTab(tile: TrackTile, set: (TrackTile) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FeedbackField("Startmelder", tile, AccessoryProps.MEASURE_START, set, single = true)
+        FeedbackField("Endmelder", tile, AccessoryProps.MEASURE_END, set, single = true)
+        PropField("Länge in mm", tile, AccessoryProps.MEASURE_LENGTH, set, Modifier.width(160.dp), number = true, placeholder = "1000")
+        PropField("Maßstab 1:", tile, AccessoryProps.SCALE, set, Modifier.width(140.dp), number = true, placeholder = "87")
+    }
+    val config = MeasureConfig.of(tile)
+    Hint(
+        if (config.start == null || config.end == null) "Start- und Endmelder eintragen, z. B. 1.3 und 1.4."
+        else "Messstrecke ${config.lengthMm} mm, Maßstab 1:${config.scale}. Zählt ab dem ersten belegten Melder bis zum anderen, " +
+            "höchstens ${MEASURE_LIMIT_S} s.",
+    )
+}
+
+private const val MEASURE_LIMIT_S = 120

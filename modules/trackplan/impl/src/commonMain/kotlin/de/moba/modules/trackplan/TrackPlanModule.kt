@@ -23,6 +23,11 @@ import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.BlockException
 import de.moba.modules.trackplan.api.BlockReservation
 import de.moba.modules.trackplan.api.FeedbackRef
+import de.moba.modules.trackplan.api.MeasureConfig
+import de.moba.modules.trackplan.api.ModelClockState
+import de.moba.modules.trackplan.api.ModelTime
+import de.moba.modules.trackplan.api.SpeedMeasurement
+import de.moba.modules.trackplan.api.measureKey
 import de.moba.modules.trackplan.api.blockName
 import de.moba.modules.trackplan.api.FeedbackList
 import de.moba.modules.trackplan.api.TableCommand
@@ -54,6 +59,9 @@ class TrackPlanRepository(private val store: TrackPlanStore?) {
 
     /** Zuege in Bloecken; bleiben bei einem Zentralenwechsel erhalten. */
     internal val trains = MutableStateFlow<Map<FeedbackRef, Int>>(emptyMap())
+
+    /** Modellzeit; laeuft bei einem Zentralenwechsel weiter. */
+    internal val clock = MutableStateFlow(ModelClockState())
     private var nextNumber = plans.value.size + 1
 
     internal fun newId(): String {
@@ -74,7 +82,11 @@ class TrackPlanRepository(private val store: TrackPlanStore?) {
  * Modul "Gleisbild" (M3): Gleisplaene zeichnen, bis zu drei gleichzeitig anzeigen und Weichen schalten.
  * Zeichnen ist kostenlos, Speichern braucht ein Abo, mehr als ein Gleisbild gleichzeitig braucht Pro.
  */
-class TrackPlanModule(private val repository: TrackPlanRepository) : MobaModule {
+class TrackPlanModule(
+    private val repository: TrackPlanRepository,
+    /** Uhr fuer Messungen und Modellzeit; in Tests austauschbar. */
+    private val millis: () -> Long = ModelTime::realMillis,
+) : MobaModule {
     override val id = TRACKPLAN_MODULE_ID
     override val displayName = "Gleisbild"
     override val version = SemVer(1, 0)
@@ -82,7 +94,7 @@ class TrackPlanModule(private val repository: TrackPlanRepository) : MobaModule 
     override val licenseKey: String? = null
 
     override suspend fun start(ctx: ModuleContext) {
-        val service = TrackPlanServiceImpl(repository, ctx.station, ctx.license, ctx.scope)
+        val service = TrackPlanServiceImpl(repository, ctx.station, ctx.license, ctx.scope, millis)
         ctx.events.on<StationEvent.TurnoutChanged>(ctx.scope) { service.onTurnout(it.address, it.thrown) }
         ctx.events.on<StationEvent.FeedbackChanged>(ctx.scope) { service.onFeedback(it.module, it.contact, it.occupied) }
         ctx.provide<TrackPlanService>(service)
@@ -96,6 +108,9 @@ class TrackPlanModule(private val repository: TrackPlanRepository) : MobaModule 
         val MULTI_VIEW_LICENSE_KEYS = listOf("pro", "club")
         const val FREE_VISIBLE_PLANS = 1
         const val PRO_VISIBLE_PLANS = 3
+
+        /** Laenger dauernde Messungen gelten als abgebrochen (Zug hat gehalten oder kam nie an). */
+        const val MAX_MEASURE_MILLIS = 120_000L
     }
 }
 
@@ -104,6 +119,7 @@ internal class TrackPlanServiceImpl(
     private val station: CommandStation,
     license: LicenseInfo,
     private val scope: CoroutineScope,
+    private val millis: () -> Long = ModelTime::realMillis,
 ) : TrackPlanService {
     override val plans: StateFlow<List<TrackPlan>> = repository.plans
     override val unsaved: StateFlow<Boolean> = repository.unsaved
@@ -144,6 +160,27 @@ internal class TrackPlanServiceImpl(
         repository.plans.update { list -> list.filterNot { it.id == id }.ifEmpty { listOf(TrackPlan(repository.newId(), "Gleisbild 1")) } }
         repository.visible.update { ids ->
             ids.filter { it != id }.ifEmpty { listOf(repository.plans.value.first().id) }
+        }
+        repository.unsaved.value = true
+    }
+
+    override fun duplicatePlan(id: String): TrackPlan {
+        val source = plans.value.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Gleisbild nicht gefunden")
+        val names = plans.value.map { it.name }.toSet()
+        val name = generateSequence(1) { it + 1 }.map { if (it == 1) "${source.name} (Kopie)" else "${source.name} (Kopie $it)" }.first { it !in names }
+        val copy = source.copy(id = repository.newId(), name = name.take(40))
+        repository.plans.update { it + copy }
+        repository.unsaved.value = true
+        return copy
+    }
+
+    override fun movePlan(id: String, delta: Int) {
+        repository.plans.update { list ->
+            val i = list.indexOfFirst { it.id == id }
+            if (i < 0) return@update list
+            val j = (i + delta).coerceIn(0, list.lastIndex)
+            if (i == j) return@update list
+            list.toMutableList().apply { add(j, removeAt(i)) }
         }
         repository.unsaved.value = true
     }
@@ -373,7 +410,63 @@ internal class TrackPlanServiceImpl(
         val changed = (ref in _occupied.value) != occupied
         _occupied.update { if (occupied) it + ref else it - ref }
         if (changed) automate(ref, occupied)
+        if (changed && occupied) measure(ref)
     }
+
+    // ------------------------------------------------------------ Messung
+
+    private val _measurements = MutableStateFlow<Map<String, SpeedMeasurement>>(emptyMap())
+    override val measurements: StateFlow<Map<String, SpeedMeasurement>> = _measurements
+
+    /** Laufende Messungen: Messstrecke zu (zuerst erreichter Melder, Zeitpunkt). */
+    private val pending = mutableMapOf<String, Pair<FeedbackRef, Long>>()
+
+    /**
+     * Wie in iTrain: Ein Zug erreicht den einen Melder der Messstrecke, dann den anderen; aus der Zeit dazwischen
+     * und der Laenge folgt die Geschwindigkeit. Messungen laenger als [TrackPlanModule.MAX_MEASURE_MILLIS] verfallen.
+     */
+    private fun measure(ref: FeedbackRef) {
+        val now = millis()
+        for (plan in repository.plans.value) for (tile in plan.tiles) {
+            if (tile.shape.kind != TileKind.MEASURE) continue
+            val config = MeasureConfig.of(tile)
+            val start = config.start ?: continue
+            val end = config.end ?: continue
+            if (ref != start && ref != end || start == end) continue
+            val key = measureKey(plan.id, tile)
+            val first = pending[key]
+            if (first != null && first.first != ref && now - first.second in 1..TrackPlanModule.MAX_MEASURE_MILLIS) {
+                pending.remove(key)
+                // Welcher Zug war es? Der aus dem Block des ersten Melders, falls eingesetzt.
+                val address = repository.trains.value[first.first] ?: repository.trains.value[ref]
+                _measurements.update {
+                    it + (key to SpeedMeasurement(now - first.second, config.lengthMm, config.scale, forward = ref == end, address = address))
+                }
+            } else {
+                pending[key] = ref to now
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ Modellzeit
+
+    override val clock: StateFlow<ModelClockState> = repository.clock
+
+    private fun rebase(change: (ModelClockState) -> ModelClockState) = repository.clock.update { c ->
+        val now = millis()
+        change(c.copy(baseMinutes = c.minutesAt(now), baseMillis = now))
+    }
+
+    override fun setClock(hours: Int, minutes: Int) {
+        require(hours in 0..23 && minutes in 0..59) { "Uhrzeit zwischen 00:00 und 23:59" }
+        rebase { it.copy(baseMinutes = hours * 60.0 + minutes) }
+    }
+
+    override fun setClockFactor(factor: Int) = rebase { it.copy(factor = factor.coerceIn(1, ModelClockState.MAX_FACTOR)) }
+
+    override fun startClock() = rebase { it.copy(running = true) }
+
+    override fun stopClock() = rebase { it.copy(running = false) }
 
     /**
      * Steuerung wie in iTrain: Einschalt-Melder schalten Zubehoer ein, sobald sie belegt werden (z. B. Bahnuebergang
