@@ -20,8 +20,11 @@ data class TrackSegment(val from: Int, val to: Int, val branch: Branch = Branch.
 /** Welcher Weichenstellung ein Gleisstueck angehoert. */
 enum class Branch { MAIN, LEFT, RIGHT }
 
-/** Was eine Kachel ausser Gleis noch traegt. */
-enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT }
+/**
+ * Was eine Kachel ausser Gleis noch traegt. Zubehoer wie in iTrain: [ASPECT] (Zubehoer mit mehreren Bildern),
+ * [RELAY], [LIGHT], [SOUND], [GATE] (Bahnuebergang), [TURNTABLE] und [TRANSFER] (Schiebebuehne).
+ */
+enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT, SYMBOL, ASPECT, RELAY, LIGHT, SOUND, GATE, TURNTABLE, TRANSFER, MEASURE, CLOCK }
 
 /**
  * Alle Gleisformen des Gleisbilds. Die Segmente gelten fuer Drehung 0;
@@ -71,20 +74,52 @@ enum class TrackShape(val label: String, val kind: TileKind, val segments: List<
     FEEDBACK("Rückmelder", TileKind.FEEDBACK, listOf(TrackSegment(0, 4))),
     UNCOUPLER("Entkuppler", TileKind.UNCOUPLER, listOf(TrackSegment(0, 4))),
     TEXT("Text", TileKind.TEXT, emptyList()),
+    SYMBOL("Symbol", TileKind.SYMBOL, emptyList()),
+    ACCESSORY_ASPECT("Zubehör mit Bildern", TileKind.ASPECT, emptyList()),
+    RELAY("Relais", TileKind.RELAY, emptyList()),
+    LIGHT("Licht", TileKind.LIGHT, emptyList()),
+    SOUND("Sound", TileKind.SOUND, emptyList()),
+    LEVEL_CROSSING("Bahnübergang", TileKind.GATE, listOf(TrackSegment(0, 4))),
+    TURNTABLE("Drehscheibe", TileKind.TURNTABLE, emptyList()),
+    TRANSFER_TABLE("Schiebebühne", TileKind.TRANSFER, emptyList()),
+    MEASUREMENT("Messstrecke", TileKind.MEASURE, listOf(TrackSegment(0, 4))),
+    CLOCK("Modellzeit-Uhr", TileKind.CLOCK, emptyList()),
     ;
 
-    /** Braucht eine Digitaladresse (Weichen, Signale, Entkuppler). */
-    val hasAddress: Boolean get() = kind == TileKind.TURNOUT || kind == TileKind.SIGNAL || kind == TileKind.UNCOUPLER
+    /**
+     * Braucht eine Digitaladresse (Weichen, Signale, Entkuppler, Zubehoer); bei Symbolen schaltet sie den Zustand.
+     * Beim Sound ist sie freiwillig, er spielt auch ohne Zentrale.
+     */
+    val hasAddress: Boolean get() = kind in ADDRESSED
+
+    /** Zubehoer, das sich ein- und ausschalten laesst und dafuer Einschalt- und Ausschalt-Melder kennt. */
+    val switchable: Boolean get() = kind in SWITCHABLE
+
+    /** Drehscheibe oder Schiebebuehne: Buehne mit Gleisanschluessen, gesteuert ueber [TableConfig]. */
+    val isTable: Boolean get() = kind == TileKind.TURNTABLE || kind == TileKind.TRANSFER
+
+    /** Bedeckt mehr als ein Feld (Drehscheibe, Schiebebuehne, Uhr). */
+    val isLarge: Boolean get() = isTable || kind == TileKind.CLOCK
 
     /** Dreiwegweichen brauchen zwei Adressen: [address] fuer links, [address] + 1 fuer rechts. */
     val addressCount: Int get() = if (this == TURNOUT_THREE_WAY) 2 else 1
 
     fun segments(rotation: Int) = segments.map { it.rotated(rotation) }
+
+    private companion object {
+        val SWITCHABLE = setOf(TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.GATE)
+        val ADDRESSED = setOf(
+            TileKind.TURNOUT, TileKind.SIGNAL, TileKind.UNCOUPLER, TileKind.SYMBOL, TileKind.ASPECT,
+            TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.GATE, TileKind.TURNTABLE, TileKind.TRANSFER,
+        )
+    }
 }
 
 /**
  * Eine belegte Rasterzelle. [rotation] in 45-Grad-Schritten (0 bis 7).
  * [feedbackModule]/[feedbackContact] verbinden einen Rueckmelder mit s88-Modul und Kontakt.
+ * [symbol] verweist auf ein eigenes Symbol (Kennung) oder bei Signalen auf ein Signalsystem ("signal:<kennung>").
+ * [props] haelt die Zubehoer-Einstellungen aus den Reitern (Name, Bilder, Melder, Drehscheibe usw.), siehe [AccessoryProps].
  */
 data class TrackTile(
     val x: Int,
@@ -95,8 +130,33 @@ data class TrackTile(
     val feedbackModule: Int? = null,
     val feedbackContact: Int? = null,
     val text: String = "",
+    val symbol: String = "",
+    val props: Map<String, String> = emptyMap(),
 ) {
     fun segments() = shape.segments(rotation)
+
+    fun prop(key: String): String = props[key].orEmpty()
+
+    /** Setzt eine Einstellung; ein leerer Wert entfernt sie. */
+    fun withProp(key: String, value: String): TrackTile = copy(props = if (value.isEmpty()) props - key else props + (key to value))
+
+    /** Zellen, die die Kachel bedeckt; Drehscheiben und Schiebebuehnen sind groesser als eine Zelle. */
+    fun footprint(): Footprint = when (shape.kind) {
+        TileKind.TURNTABLE -> TableConfig.of(this).radius.let { r -> Footprint(x - r, y - r, 2 * r + 1, 2 * r + 1) }
+        TileKind.TRANSFER -> TableConfig.of(this).let { c ->
+            if (c.vertical) Footprint(x, y, c.positions, c.length) else Footprint(x, y, c.length, c.positions)
+        }
+        TileKind.CLOCK -> clockSize().let { n -> Footprint(x, y, n, n) }
+        else -> Footprint(x, y, 1, 1)
+    }
+
+    /** Groesse der Modellzeit-Uhr in Rasterfeldern (1 bis 6, anfangs 2). */
+    fun clockSize(): Int = prop(AccessoryProps.SIZE).toIntOrNull()?.coerceIn(1, 6) ?: 2
+}
+
+/** Rechteck aus Rasterzellen. */
+data class Footprint(val x: Int, val y: Int, val width: Int, val height: Int) {
+    operator fun contains(cell: Pair<Int, Int>) = cell.first in x until x + width && cell.second in y until y + height
 }
 
 /** Ein Gleisbild: Name, Rastergroesse und Kacheln. */
@@ -108,6 +168,40 @@ data class TrackPlan(
     val tiles: List<TrackTile> = emptyList(),
 ) {
     fun tileAt(x: Int, y: Int): TrackTile? = tiles.firstOrNull { it.x == x && it.y == y }
+
+    /** Kachel an der Zelle oder, wenn dort keine liegt, eine Drehscheibe/Schiebebuehne, die die Zelle bedeckt. */
+    fun objectAt(x: Int, y: Int): TrackTile? = tileAt(x, y) ?: tiles.lastOrNull { it.shape.isLarge && (x to y) in it.footprint() }
+
+    /** Kacheln, deren Feld im Rechteck von ([x1], [y1]) bis ([x2], [y2]) liegt (Ecken in beliebiger Reihenfolge). */
+    fun tilesIn(x1: Int, y1: Int, x2: Int, y2: Int): List<TrackTile> {
+        val xs = minOf(x1, x2)..maxOf(x1, x2)
+        val ys = minOf(y1, y2)..maxOf(y1, y2)
+        return tiles.filter { it.x in xs && it.y in ys }
+    }
+
+    /**
+     * Verschiebt die Kacheln an [cells] um ([dx], [dy]). Was am Ziel liegt und nicht mitwandert, wird ersetzt.
+     * @return `null`, wenn eine Kachel aus dem Raster fiele
+     */
+    fun moveTiles(cells: Set<Pair<Int, Int>>, dx: Int, dy: Int): TrackPlan? {
+        val moving = tiles.filter { (it.x to it.y) in cells }
+        if (moving.isEmpty() || dx == 0 && dy == 0) return this
+        val moved = moving.map { it.copy(x = it.x + dx, y = it.y + dy) }
+        if (moved.any { it.x !in 0 until width || it.y !in 0 until height }) return null
+        val targets = moved.map { it.x to it.y }.toSet()
+        val rest = tiles.filter { (it.x to it.y) !in cells && (it.x to it.y) !in targets }
+        return copy(tiles = rest + moved)
+    }
+
+    /** Entfernt alle Kacheln an [cells]. */
+    fun removeAll(cells: Set<Pair<Int, Int>>) = copy(tiles = tiles.filterNot { (it.x to it.y) in cells })
+
+    /**
+     * Fuegt kopierte Kacheln ein; [clip] liegt relativ zu (0, 0), die linke obere Ecke landet auf ([x], [y]).
+     * Was ausserhalb des Rasters landen wuerde, faellt weg.
+     */
+    fun paste(clip: List<TrackTile>, x: Int, y: Int): TrackPlan =
+        clip.fold(this) { plan, t -> plan.put(t.copy(x = t.x + x, y = t.y + y)) }
 
     /** Setzt oder ersetzt die Kachel an ihrer Position. Ausserhalb des Rasters passiert nichts. */
     fun put(tile: TrackTile): TrackPlan {
@@ -169,4 +263,20 @@ fun TrackTile.activeBranch(turnouts: Map<Int, Boolean>): Branch? {
         TrackShape.TURNOUT_LEFT -> turnouts[a]?.let { if (it) Branch.LEFT else Branch.MAIN }
         else -> turnouts[a]?.let { if (it) Branch.RIGHT else Branch.MAIN }
     }
+}
+
+/**
+ * Signalbilder schalten wie bei iTrain mit Adresspaaren (z. B. Viessmann-Multiplexer):
+ * Bild 0 = Grundadresse rot, Bild 1 = Grundadresse gruen, Bild 2 = Adresse + 1 rot, Bild 3 = Adresse + 1 gruen usw.
+ * "rot" ist an der Zentrale "abzweigend".
+ */
+object SignalAddressing {
+    /** Hoechstens so viele Signalbilder lassen sich schalten (vier Adressen). */
+    const val MAX_ASPECTS = 8
+
+    /** Adresse und Stellung (true = rot/abzweigend) fuer ein Signalbild. */
+    fun output(base: Int, aspect: Int): Pair<Int, Boolean> = (base + aspect / 2) to (aspect % 2 == 0)
+
+    /** Welches Signalbild eine gemeldete Weichenstellung bedeutet. */
+    fun aspect(base: Int, address: Int, thrown: Boolean): Int = (address - base) * 2 + if (thrown) 0 else 1
 }

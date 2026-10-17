@@ -1,5 +1,6 @@
 package de.moba.modules.vehicles.api
 
+import de.moba.core.model.LocoDynamics
 import kotlinx.coroutines.flow.StateFlow
 
 const val VEHICLES_MODULE_ID = "moba.fahrzeuge"
@@ -26,6 +27,20 @@ enum class Traction(val label: String) {
     ELECTRIC("Elektro"),
     RAILCAR("Triebwagen"),
     OTHER("Sonstige"),
+}
+
+/** Spurweite wie in iTrain; wichtig fuer Bedingungen in Aktionen (z. B. Dreischienengleis H0/H0m). */
+enum class Gauge(val label: String) {
+    Z("Z (6,5 mm)"),
+    N("N (9 mm)"),
+    TT("TT (12 mm)"),
+    H0("H0 (16,5 mm)"),
+    H0M("H0m (12 mm)"),
+    H0E("H0e (9 mm)"),
+    S("S (22,5 mm)"),
+    ZERO("0 (32 mm)"),
+    ONE("1 (45 mm)"),
+    G("G / IIm (45 mm)"),
 }
 
 enum class DecoderProtocol(val label: String) {
@@ -55,6 +70,11 @@ data class LocoRecord(
     /** Funktionsnamen, z. B. 0 = "Licht". */
     val functions: Map<Int, String> = emptyMap(),
     val notes: String = "",
+    /** Fuehrerstand, Traegheitssimulation, Rueckmelde-Offset, Reaktionsverzoegerung und Zeitraum. */
+    val dynamics: LocoDynamics = LocoDynamics(),
+    val gauge: Gauge? = null,
+    /** Wagen, die diese Lok als Zug zieht (Ids aus der Wagenliste), z. B. fuer Bedingungen in Aktionen. */
+    val consist: List<String> = emptyList(),
 )
 
 /** Bauart einer Wagengattung; [code] ist der Kennbuchstabe nach UIC. */
@@ -109,11 +129,42 @@ data class WagonClass(
     }
 }
 
+/** Zuggattung wie in iTrain, z. B. "ICE", "RE" oder "Gag" (Ganzzug); [maxSpeed] in km/h, `null` = ohne Grenze. */
+data class TrainCategory(
+    val id: String,
+    val code: String,
+    val name: String = "",
+    val passenger: Boolean = true,
+    val maxSpeed: Int? = null,
+)
+
+/** Ein Zug: Lok(s) und Wagen (Ids der Wagengattungen, auch mehrfach) mit einer Zuggattung. */
+data class TrainSet(
+    val id: String,
+    val name: String,
+    val categoryId: String = "",
+    val locos: List<String> = emptyList(),
+    val wagons: List<String> = emptyList(),
+)
+
 /** Alle Fahrzeuge der Anlage. */
 data class Fleet(
     val locos: List<LocoRecord> = emptyList(),
     val wagons: List<WagonClass> = emptyList(),
+    val categories: List<TrainCategory> = emptyList(),
+    val trains: List<TrainSet> = emptyList(),
 ) {
+    /** Laenge eines Zugs aus den Laengen seiner Fahrzeuge in mm; fehlende Laengen zaehlen nicht. */
+    fun lengthMm(train: TrainSet): Int =
+        train.locos.sumOf { id -> locos.firstOrNull { it.id == id }?.lengthMm ?: 0 } +
+            train.wagons.sumOf { id -> wagons.firstOrNull { it.id == id }?.lengthMm ?: 0 }
+
+    /** Der Zug, in dem die Lok mit [address] faehrt, sonst `null`. */
+    fun trainOf(address: Int): TrainSet? {
+        val loco = locos.firstOrNull { it.address == address } ?: return null
+        return trains.firstOrNull { loco.id in it.locos }
+    }
+
     fun count(group: VehicleGroup) = when (group) {
         VehicleGroup.LOCOS -> locos.size
         else -> wagons.count { it.group == group }
@@ -126,6 +177,12 @@ data class Fleet(
 interface VehicleStore {
     fun load(): Fleet?
     fun save(fleet: Fleet)
+
+    /** Foto eines Fahrzeugs (PNG, JPEG ...), `null` = keins. */
+    fun loadImage(id: String): ByteArray? = null
+
+    /** `null` loescht das Foto. */
+    fun saveImage(id: String, bytes: ByteArray?) = Unit
 }
 
 /**
@@ -150,6 +207,33 @@ interface VehicleService {
 
     /** Eine freie Id fuer einen neuen Eintrag. */
     fun newId(group: VehicleGroup): String
+
+    /** Zuggattung anlegen oder aendern; frei, ohne Grenze. */
+    fun saveCategory(category: TrainCategory): TrainCategory
+
+    /** Loescht die Gattung; Zuege behalten sie nicht. */
+    fun deleteCategory(id: String)
+
+    /** Zug anlegen oder aendern; frei, ohne Grenze. */
+    fun saveTrain(train: TrainSet): TrainSet
+    fun deleteTrain(id: String)
+
+    /** Freie Id fuer eine Gattung ("zg-") oder einen Zug ("zug-"). */
+    fun newObjectId(prefix: String): String
+
+    /** Foto eines Fahrzeugs, `null` = keins. */
+    fun image(id: String): ByteArray?
+
+    /** Setzt oder loescht (`null`) das Foto; wird sofort gespeichert. @throws IllegalArgumentException wenn zu gross */
+    fun setImage(id: String, bytes: ByteArray?)
+
+    /** Zaehlt bei jeder Bildaenderung hoch, damit Ansichten neu laden. */
+    val imageVersion: StateFlow<Int>
+
+    companion object {
+        /** Groesste erlaubte Bilddatei. */
+        const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    }
 }
 
 class VehicleLimitException(message: String) : Exception(message)

@@ -24,6 +24,18 @@ dependencies {
     implementation(project(":modules:trackplan:impl"))
     implementation(project(":modules:vehicles:ui"))
     implementation(project(":modules:vehicles:impl"))
+    implementation(project(":modules:symbols:ui"))
+    implementation(project(":modules:symbols:impl"))
+    implementation(project(":modules:throttles:ui"))
+    implementation(project(":modules:throttles:impl"))
+    implementation(project(":modules:calibration:ui"))
+    implementation(project(":modules:calibration:impl"))
+    implementation(project(":modules:routes:ui"))
+    implementation(project(":modules:routes:impl"))
+    implementation(project(":modules:monitor:ui"))
+    implementation(project(":modules:monitor:impl"))
+    implementation(project(":modules:actions:ui"))
+    implementation(project(":modules:actions:impl"))
     implementation(project(":modules:decoder:ui"))
     implementation(project(":modules:decoder:impl"))
     implementation(project(":adapters:catalog"))
@@ -31,6 +43,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.swing)
     testImplementation(project(":adapters:simulator"))
     testImplementation(kotlin("test"))
+    testImplementation(compose.desktop.uiTestJUnit4)
 }
 
 // Der Test ScreenshotTest legt Vorschaubilder der Oberflaeche hier ab (siehe GitHub-Build).

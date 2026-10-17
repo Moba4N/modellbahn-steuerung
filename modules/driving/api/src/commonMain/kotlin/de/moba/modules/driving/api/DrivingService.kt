@@ -21,8 +21,20 @@ interface DrivingService {
     suspend fun drive(address: Int, speed: Int, direction: Direction)
     suspend fun setFunction(address: Int, function: Int, on: Boolean)
 
-    /** Lok normal anhalten (bremsen), Richtung bleibt. Nie durch ein Limit gesperrt. */
+    /**
+     * Lok normal anhalten, Richtung bleibt. Nie durch ein Limit gesperrt.
+     * Mit Traegheitssimulation bremst sie in der eingestellten Bremszeit (Betriebsbremse).
+     */
     suspend fun stop(address: Int)
+
+    /** Schnellbremse: sofort Fahrstufe 0, auch mit Traegheitssimulation. Nie durch ein Limit gesperrt. */
+    suspend fun emergencyBrake(address: Int)
+
+    /**
+     * Fahrhebel der Loks mit Traegheitssimulation: Ziel-Fahrstufe, auf die die Lok gerade zulaeuft.
+     * Ist sie erreicht, verschwindet die Lok aus der Liste.
+     */
+    val targets: StateFlow<Map<Int, Int>>
 }
 
 class LocoLimitReachedException(val limit: Int) :

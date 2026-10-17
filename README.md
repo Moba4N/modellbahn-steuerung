@@ -26,6 +26,11 @@ DCC-EX und Lenz XpressNet sowie die Module "Fahren", "Fahrzeuge", "Decoder" und 
 | `modules/vehicles` | Modul "Fahrzeuge": Loks, Gueterwagen- und Personenwagengattungen anlegen |
 | `modules/decoder` | Modul "Decoder": CV-Programmierung und Decoder-Datenbank |
 | `modules/trackplan` | Modul "Gleisbild": Gleisplan-Editor mit allen Gleisformen und Stellpult im Betrieb |
+| `modules/symbols` | Modul "Symbole": Pixel-Editor fuer eigene Symbole, Licht- und Formsignale (DE, CH, NL) |
+| `modules/throttles` | Modul "Mehrere Fahrregler": Leiste mit bis zu sechs Fahrreglern am unteren Rand (ab Pro) |
+| `modules/calibration` | Modul "Loks einmessen": Geschwindigkeit je Fahrstufe (14, 28, 128) ueber eine Messstrecke (ab Pro) |
+| `modules/routes` | Modul "Fahrstraßen": Fahrstrassen (stellen ab Basis), Pendelstrecken und Zugrouten (fahren ab Pro) |
+| `modules/monitor` | Modul "Monitor": Datenverkehr zur Zentrale live mitlesen (Burger-Menue, kostenlos) |
 | `apps/desktop` | Windows-App (Installer als MSI/EXE) |
 | `apps/android` | Android-App |
 | `tools/sandbox` | Startet Kern, Simulator und Beispielmodule auf der Konsole |
@@ -106,6 +111,17 @@ Jede Aenderung wird sofort in `fahrzeuge.txt` gespeichert (gleicher Ordner wie d
 Wer nach einem Abo-Wechsel mehr Eintraege hat als erlaubt, behaelt sie und kann sie bearbeiten,
 aber keine neuen anlegen.
 
+Fahreigenschaften je Lok (kostenlos, gespeichert als Zeile `fahr` in `fahrzeuge.txt`):
+
+- Fuehrerstand: das Fahrpult zeigt einen Tacho in km/h (bis Vmax), einen Fahrhebel, Bremsen und Schnellbremse
+- Traegheitssimulation: die App faehrt die Fahrstufe nach und nach hoch und runter. Anfahrzeit und Bremszeit
+  gelten von 0 bis zur Hoechststufe, der Zeitraum ist der Abstand zwischen zwei Fahrstufen (Standard 250 ms).
+  "Halt" bremst mit der Bremszeit, die Schnellbremse sofort. Ein Richtungswechsel bremst erst bis zum Stillstand.
+  Nothalt wirkt immer sofort.
+- Rueckmelde-Offset (mm): am Haltemelder faehrt die Automatik (Pendelstrecke, Zugroute) noch so weit, bevor sie haelt.
+  Die Zeit dafuer kommt aus dem Einmessen, sonst geschaetzt aus Vmax (H0).
+- Reaktionsverzoegerung (ms): so viel spaeter reagiert der Decoder; die Automatik schickt den Halt um so viel frueher.
+
 ## Decoder
 
 CVs lesen und schreiben ist kostenlos: auf dem Programmiergleis (lesen und schreiben) oder waehrend
@@ -123,18 +139,163 @@ An echter Hardware ist es noch nicht geprueft.
 
 Der Editor arbeitet auf einem Raster mit 45-Grad-Schritten. Gleisformen: Gerade, Kurve 45°, Bogen 90°,
 Weiche links/rechts, Y-Weiche, Dreiwegweiche, Kreuzung 90° und 45°, einfache und doppelte Kreuzungsweiche,
-Prellbock, Signal, Rueckmelder (s88-Modul und Kontakt), Entkuppler und Text.
+Prellbock, Signal, Rueckmelder (s88-Modul und Kontakt), Entkuppler, Text und Symbol.
+Signale arbeiten wie in iTrain: Jedem Signal laesst sich ein Signaltyp aus dem Katalog oder ein eigenes
+Signalsymbol zuweisen. Es steht neben dem Gleis und dreht sich mit ihm. Im Betrieb oeffnet ein Klick auf ein
+Signal mit mehr als zwei Bildern die Liste aller Signalbilder; Signale mit zwei Bildern wechseln direkt.
+Geschaltet wird mit Adresspaaren ab der eingetragenen Grundadresse: Bild 1 = Adresse rot, Bild 2 = Adresse gruen,
+Bild 3 = Adresse + 1 rot, Bild 4 = Adresse + 1 gruen usw. (bis 8 Bilder). Die Zuordnung steht im Editor
+unter dem Signal. Meldet die Zentrale eine dieser Adressen, zeigt das Gleisbild das passende Bild.
+Eine Symbolkachel zeigt ein eigenes Symbol, mit Schaltadresse wechselt sie zwischen
+erstem (aus) und zweitem Zustand (an).
 Im Betrieb schaltet ein Tipp Weichen, Signale und Entkuppler; belegte Rueckmelder leuchten orange.
+Die Gleisgroesse (8 bis 80, anfangs 24) laesst sich im Betrieb und im Editor mit Minus/Plus einstellen und bleibt
+gespeichert; "Einpassen" waehlt die Groesse, bei der das ganze Raster ins Fenster passt.
+Auch die Symbole in der Leiste "Gleisformen" lassen sich mit Minus/Plus verkleinern oder vergroessern (20 bis 64).
+Sind Gleisbilder beim Schliessen (Windows) oder Zurueck (Android) ungespeichert, fragt die App nach.
 
 | | Kostenlos | Basis | Pro / Club |
 |---|---|---|---|
 | Gleisbilder zeichnen und ausprobieren | ja | ja | ja |
 | Gleisbilder speichern | nein | ja | ja |
 | Gleisbilder gleichzeitig anzeigen | 1 | 1 | bis zu 3 |
+| Gleisbilder in eigenen Fenstern (Windows) | nein | nein | bis zu 3 |
+
+Mit Pro laesst sich unter Windows jedes eingeblendete Gleisbild in ein eigenes Fenster holen ("Eigenes Fenster"
+im Kopf des Gleisbilds), z. B. Bahnhof, Schattenbahnhof und Industrie auf drei
+Bildschirmen. Das Gleisbild passt sich ans Fenster an; F11 oder "Vollbild" fuellt den ganzen Bildschirm, Esc
+beendet das Vollbild. Jedes Fenster hat einen eigenen Nothalt. "Ins Hauptfenster" oder Schliessen holt das
+Gleisbild zurueck. Lage, Groesse und Vollbild merkt sich die App und oeffnet die Fenster beim naechsten Start
+wieder auf denselben Bildschirmen.
 
 Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn-steuerung`,
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
+
+### Bloecke, Zuege und Kontextmenue
+
+Jeder Rueckmelder mit s88-Modul und Kontakt ist ein Block; im Editor laesst sich ein Blockname eintragen.
+Im Betrieb steht ueber dem Gleisbild die Zugleiste mit allen Loks. Eine Lok aus der Leiste auf einen Block ziehen
+setzt sie dort ein; ein Zug im Gleisbild laesst sich auf einen anderen Block ziehen. Sein Name steht als Schild
+ueber dem Block. Welche Zuege wo stehen, merkt sich die App ueber Neustarts.
+Eine gestellte Fahrstrasse reserviert Start, Ziel und alle Rueckmelder auf ihrem Weg (gruen unterlegt); ist einer
+schon anders reserviert, laesst sie sich nicht stellen. Erreicht der Zug das Ziel, wandert er in den Zielblock und
+die Fahrstrasse gibt ihre Bloecke frei. Pendelzuege und Zugrouten nehmen eingesetzte Zuege an jedem Halt mit.
+Rechtsklick (Windows) oder langes Druecken (Android) oeffnet ein Kontextmenue passend zur Kachel: bei Bloecken
+Zug einsetzen, Zug entfernen und Block freigeben, bei Weichen die Stellungen, bei Signalen und Zubehoer mit Bildern
+alle Bilder, bei schaltbarem Zubehoer ein/aus, bei Drehscheiben die Steuerung. "Alle Bloecke freigeben" steht
+in jedem Kontextmenue, solange etwas reserviert ist.
+
+### Messung, Modellzeit und Bearbeiten
+
+- **Messstrecke**: Gleisform "Messstrecke" mit Start- und Endmelder, Laenge in mm und Massstab (Reiter Messung).
+  Faehrt ein Zug vom einen zum anderen Melder (in beide Richtungen), zeigt das Gleisbild die Vorbildgeschwindigkeit
+  als Schild ueber der Strecke; das Kontextmenue zeigt km/h, mm/s, Fahrzeit, Richtung und Zug.
+- **Modellzeit-Uhr**: Gleisform "Modellzeit-Uhr" (1 bis 6 Felder gross) und die Uhrzeit oben im Betrieb. Ein Klick
+  oeffnet den Dialog: Uhr stellen, Zeitraffer x1 bis x60, Starten und Anhalten.
+- **Bearbeiten**: Mit "Auswaehlen" eine Kachel ziehen verschiebt sie. "Bereich" zieht einen Rahmen auf (oder nimmt
+  Kacheln per Antippen dazu); der markierte Bereich laesst sich ziehen, mit den Pfeilen oder Pfeiltasten verschieben,
+  drehen (R), kopieren (Strg+C), ausschneiden (Strg+X), loeschen (Entf) und mit "Einfuegen" (Strg+V) an anderer Stelle
+  oder in einem anderen Gleisbild einsetzen. Rechtsklick bzw. langes Druecken oeffnet dieselben Befehle als Menue.
+- **Steuerobjekte wiederverwenden**: Wie in iTrain kann dieselbe Weiche, dasselbe Signal oder derselbe Block an mehreren
+  Stellen und in mehreren Gleisbildern liegen. "Vorhandenes Objekt uebernehmen" kopiert Adresse, Melder und
+  Einstellungen; die Eigenschaften zeigen, wo das Objekt noch liegt, und "Auf alle Stellen uebertragen" gleicht sie an.
+- **Gleisbilder**: neu anlegen, umbenennen, Groesse aendern, kopieren und in der Reihenfolge verschieben.
+
+### Zubehoer wie in iTrain
+
+Weitere Formen in der Leiste "Gleisformen": Zubehoer mit Bildern (Aspekt), Relais, Licht, Sound, Bahnuebergang,
+Drehscheibe und Schiebebuehne. Ihre Einstellungen stehen im Editor in Reitern:
+
+| Zubehoer | Reiter |
+|---|---|
+| Relais, Licht, Bahnuebergang, Entkuppler | Allgemein (Name), Decoder (Adresse, "Ein" = rot oder gruen), Steuerung (Impulsdauer, Einschalt- und Ausschalt-Melder) |
+| Zubehoer mit Bildern | Allgemein (Name, Bilder z. B. `Aus\|Blinken\|Dauerlicht`, bis 8), Decoder (Grundadresse, Adresspaare wie bei Signalen) |
+| Sound | Datei (Klangdatei waehlen, Probehoeren), Decoder (Adresse optional), Steuerung (Einschalt-Melder) |
+| Drehscheibe, Schiebebuehne | Allgemein, Decoder (Grundadresse, Adresspaare oder eine Adresse je Gleis), Zubehoer (Positionen, angeschlossene Gleise, Radius/Laenge), Rueckmelder (Fertig-Melder, Zeit je Position), Block (Blockname, Melder "Buehne belegt", Sperre), Steuern (Befehle 180°, Schritt rechts/links als `Adresse:r` oder `Adresse:g`) |
+
+Im Betrieb schaltet ein Klick Relais, Licht und Bahnuebergang ein oder aus, spielt einen Sound ab und oeffnet
+bei Zubehoer mit Bildern die Bildliste. Ein Klick auf eine Drehscheibe oder Schiebebuehne oeffnet ihre Steuerung:
+Gleis anfahren, 180° drehen, Schritt links/rechts. Ohne eigenen Befehl faehrt die Buehne das Zielgleis ueber seine
+Gleisadresse an (Adresspaare: Gleis 0 = Grundadresse rot, Gleis 1 = gruen, Gleis 2 = Adresse + 1 rot ...).
+Waehrend sie dreht, ist die Buehne gelb, bis der Fertig-Melder kommt oder die Zeit je Position um ist. Ist die
+Sperre im Reiter Block an, bewegt sie sich nicht, solange der Melder "Buehne belegt" belegt ist.
+Melder schalten automatisch: Wird ein Einschalt-Melder belegt, schaltet das Zubehoer ein (Bahnuebergang schliesst,
+Sound spielt). Hat der Zug den Ausschalt-Melder verlassen, schaltet es aus; ohne Ausschalt-Melder, sobald alle
+Einschalt-Melder frei sind. Klaenge legt die App als Kopie im Ordner `klaenge` ab (Windows: WAV, AIFF, AU;
+Android: MP3, OGG, WAV); sie spielen auch, wenn gerade eine andere Ansicht offen ist.
+
+## Fahrpult
+
+Am PC ist das Fahrpult rechts anfangs ausgeblendet. Der Tacho-Knopf oben neben "Gleis an/aus" blendet es ein
+und aus; die Wahl bleibt gespeichert. Ohne eingeblendetes Fahrpult zeigt der Reiter "Fahren" es ueber der Lokliste.
+Das X oben im Fahrpult schliesst es wieder, ebenso ein zweiter Klick auf die gewaehlte Lok; die Lok faehrt dabei weiter.
+
+Funktionstasten: F0 bis F12, F20, F28 oder F31 (Auswahl ueber den Tasten, gilt fuer Fahrpult und alle Fahrregler).
+Die Fahrregler am unteren Rand oeffnen ihre Funktionen ueber die Taste "F". Wie viele Funktionen die Zentrale
+schalten kann, haengt vom Protokoll ab: Z21/YD7001 bis F31, XpressNet bis F28.
+
+## Mehrere Fahrregler
+
+Ab Pro gibt es am unteren Bildrand eine Leiste "Fahrregler". Mit "+ Fahrregler" kommt eine Lok aus der Liste
+oder per Adresse dazu, bis zu sechs gleichzeitig. Jeder Regler hat Fahrstufe, Richtung, Halt und Licht.
+Die Leiste laesst sich einklappen; die offenen Regler bleiben in `fahrregler.txt` gespeichert.
+
+## Loks einmessen
+
+Ab Pro misst der Reiter "Einmessen", wie schnell eine Lok in jeder Fahrstufe faehrt (Vorbild-km/h).
+Dazu braucht es einen Rundkurs mit zwei Rueckmeldern; die Laenge der Messstrecke wird von Anfang Startmelder
+bis Anfang Endmelder gemessen. Fuer jede Stufe faehrt die Lok an, wartet die Anlaufzeit ab und misst die Zeit
+zwischen den Meldern. 14 und 28 Fahrstufen werden komplett gemessen, bei 128 jede 4., 8. oder 16. Stufe.
+Die Zentrale faehrt intern immer mit 128 Fahrstufen; fuer 14 und 28 nimmt die App die passenden Stellen dieser Skala.
+Kommt ein Melder nicht innerhalb von 180 Sekunden, gilt die Stufe als zu langsam. Ergebnis: Kurve, Tabelle,
+Hoechstgeschwindigkeit und "ab welcher Fahrstufe faehrt die Lok X km/h". Gespeichert in `einmessen.txt`.
+
+## Fahrstrassen, Pendelstrecken, Zugrouten
+
+Der Reiter "Fahrstraßen" hat drei Bereiche. Anlegen und Bearbeiten ist in jeder Version moeglich.
+
+- **Fahrstrassen** (stellen ab Basis): eine Liste von Weichen- und Signaladressen mit gerade/abzweig, dazu ein
+  optionaler Start- und ein Zielmelder (s88 als `Modul.Kontakt`, z. B. `1.3`). "Stellen" schaltet die Weichen
+  nacheinander mit 150 ms Pause. Eine gestellte Fahrstrasse sperrt ihre Adressen: eine zweite Fahrstrasse mit
+  einer gemeinsamen Weiche laesst sich erst stellen, wenn die erste aufgeloest ist. Wird der Zielmelder belegt,
+  loest sie sich von selbst auf.
+- **Pendelstrecken** (ab Pro): eine Lok faehrt vorwaerts bis Endmelder B, haelt, wartet und faehrt rueckwaerts bis
+  Endmelder A, immer wieder. Optionale Bremsmelder schalten vorher auf die Bremsstufe.
+- **Zugrouten** (ab Pro): eine Lok faehrt nacheinander ueber mehrere Fahrstrassen. Jeder Abschnitt stellt seine
+  Fahrstrasse, sobald sie frei ist, faehrt bis zum Haltemelder (leer = Zielmelder der Fahrstrasse), haelt, loest auf
+  und wartet. Mit "Immer wieder von vorn" faehrt die Route im Kreis.
+
+**Aus dem Gleisbild:** In jedem Editor oeffnet "Im Gleisbild wählen" das Gleisbild. Fuer eine Fahrstrasse Start und
+Ziel antippen: die App sucht alle befahrbaren Wege (kuerzester zuerst), zeigt sie mit gestellten Weichen an und
+uebernimmt Weichenadressen samt Stellung, ersten und letzten Rueckmelder als Start und Ziel. Fuer eine Pendelstrecke
+die beiden Endmelder antippen (Bremsmelder = die Melder direkt davor). Fuer eine Zugroute die Halte nacheinander
+antippen; jeder Abschnitt wird eine Fahrstrasse (vorhandene mit gleichem Weg werden wiederverwendet).
+
+"Stopp" haelt die Lok sofort an und gibt alle Fahrstrassen der Automatik frei. Eine Lok kann nur in einer Automatik
+gleichzeitig fahren. Gespeichert in `fahrstrassen.txt`.
+
+## Symbole
+
+Der Symbol-Editor arbeitet wie in TrainController: quadratische Pixelbilder (16, 24, 32 oder 48 Pixel)
+mit mehreren Zustaenden, z. B. "aus" und "an" oder je Signalbild einer. Werkzeuge: Stift, Radierer, Linie,
+Rechteck, Ellipse (je offen und gefuellt), Flaeche fuellen, Farbe aufnehmen; dazu Spiegeln, Drehen,
+Verschieben, Rueckgaengig/Wiederholen, Palette mit Signalfarben und eigene Farbe als Hex-Wert.
+
+Unter "Signalbilder" stehen Signale aus Deutschland, der Schweiz und den Niederlanden:
+Lichtsignale (H/V, Ks, Hl, Sh; SBB System L und N, Zwergsignal; NS-Lichtsein) und Formsignale
+(Formhaupt- und Formvorsignal ein- und zweifluegelig, Formsperrsignal; SBB-Formsignale und NS-Armsein, historisch).
+Jedes System laesst sich als eigenes Symbol uebernehmen und weiter anpassen.
+Farben und Bedeutungen folgen den Signalbuechern, die Darstellung ist vereinfacht. Die Schweizer Formsignale
+und das NS-Armsein sind nach Fachwissen gezeichnet und noch nicht anhand von Vorbildern geprueft (in der App markiert).
+Daten: `SignalData.kt` (Lichtsignale) und `FormSignalData.kt` (Formsignale) in `modules/symbols/api`.
+
+| | Kostenlos | Basis | Pro / Club |
+|---|---|---|---|
+| Symbole zeichnen, Signalbilder nutzen | ja | ja | ja |
+| Eigene Symbole speichern | nein | nein | ja |
+
+Die Symbole liegen in `symbole.txt` neben den Gleisbildern.
 
 ## Erscheinungsbild
 
@@ -142,9 +303,73 @@ Das Burger-Menue oben neben "Gleis an/aus" wechselt die Ansicht und oeffnet "Ers
 Dort lassen sich kostenlos einstellen:
 
 - Design: Modern, Windows 11 (Fluent-Farben, kleine Ecken) oder Stellwerk, jeweils hell oder dunkel
-- Schriftart (Standard, Serifenlos, Serifen, Schreibmaschine) und Schriftgroesse
+- Akzentfarbe fuer die ganze App (Knoepfe, Auswahl, Regler, Tacho): Farbe des Designs oder eine von zehn Farben
+- Schriftart: vier Systemschriften und acht mitgelieferte (Outfit, Work Sans, Instrument Sans, Big Shoulders,
+  Tektur, Lora, IBM Plex Serif, JetBrains Mono; SIL Open Font License, siehe `core/ui-shell/schrift-lizenzen`),
+  dazu die Schriftgroesse
 - eigenes Hintergrundbild als Wasserzeichen in drei Staerken. Das Bild wird als Kopie
   `hintergrund.bild` im Datenordner gespeichert.
+
+## Datei-Menue
+
+Das zweite Burger-Menue links oben ("Datei") arbeitet wie das Datei-Menue in iTrain:
+
+- **Anlagen**: Jede Anlage ist ein eigener Ordner mit Gleisbildern, Fahrzeugen, Fahrstrassen, Symbolen, Decodern,
+  Einmessungen und Klaengen. Der bisherige Datenordner ist die Standard-Anlage "Meine Anlage"; neue Anlagen liegen
+  unter `anlagen/` (auf Wunsch als Kopie der offenen). Unter Windows laesst sich jeder Ordner als Anlage oeffnen.
+- **Zuletzt verwendet**: die letzten sechs Anlagen direkt im Menue. Vor dem Wechsel fragt die App nach ungespeicherten Aenderungen.
+- **Sicherung**: ZIP aller Daten in `sicherungen/`, automatisch einmal am Tag beim Start (die letzten 10 bleiben),
+  wiederherstellen, loeschen oder an anderer Stelle speichern. Vor Wiederherstellen und Import sichert die App den alten Stand.
+- **Export und Import**: gewaehlte Teile als ZIP speichern und in eine andere Anlage oder auf ein anderes Geraet
+  uebernehmen; die gewaehlten Teile ersetzen die vorhandenen.
+- **Ressourcen-Browser**: alle Dateien der Anlage mit Groesse und Datum, nach Daten, Bildern und Klaengen gefiltert;
+  Bilder ansehen, Klaenge abspielen, Dateien speichern oder loeschen.
+- **Drucken**: jedes Gleisbild sowie Lok- und Wagenliste mit Vorschau; Windows ueber den Druckerdialog
+  (auch "Microsoft Print to PDF"), Android ueber den Druckdienst des Systems.
+
+## Menue "Bearbeiten"
+
+Das Burger-Menue "Bearbeiten" (oben links, neben "Datei") oeffnet wie in iTrain jede Objektliste direkt, ohne in
+das Gleisbild oder den passenden Reiter zu wechseln: Schnittstellen, Lokomotiven, Wagen, Zuggattungen, Zuege,
+Zugrouten, Rueckmelder, Zubehoer, Fahrwege, Aktionen, Bloecke, Bahnhoefe und Booster. Links stehen alle Listen,
+daneben die Eintraege und das Formular.
+
+- **Zuggattungen** (z. B. RE, IC, Gag) mit Personen-/Gueterzug und Hoechstgeschwindigkeit, **Zuege** aus Lok(s)
+  und Wagen mit Gattung und errechneter Laenge; eine Lok faehrt immer nur in einem Zug. Beides steht in `fahrzeuge.txt`.
+- **Rueckmelder, Zubehoer und Bloecke** zeigen alle Kacheln aller Gleisbilder mit Zustand und denselben Feldern wie
+  im Gleisbild-Editor; bei Bloecken zusaetzlich Zug setzen/entfernen, Reservierung aufheben, Bahnhof und Booster.
+- **Bahnhoefe** fassen Bloecke unter Namen und Kuerzel zusammen, **Booster** haben eine Schaltadresse, einen
+  Zustandsmelder (Kurzschluss) und versorgte Bloecke. Beides steht in `anlagenobjekte.txt`, ist kostenlos und wird
+  sofort gespeichert. Die Bedingung "Booster" in Aktionen prueft mit Booster-Name auch dessen Zustand.
+
+## Aktionen
+
+Das dritte Burger-Menue oben links ("Aktionen", neben "Datei") arbeitet wie die Aktionen in iTrain: Eine Aktion hat
+einen Bedingungsbaum und eine Befehlsliste. Sobald die Bedingung erfuellt wird (Wechsel von "nicht erfuellt" zu
+"erfuellt"), fuehrt die App die Befehle der Reihe nach aus. Im Menue lassen sich Aktionen ein- und ausschalten und
+von Hand starten; "Aktionen bearbeiten …" oeffnet den Editor mit Live-Anzeige, ob die Bedingung gerade erfuellt ist.
+Bearbeiten ist kostenlos, Ausfuehren braucht Pro. Gespeichert wird in `aktionen.txt` (auch in Sicherung und Export).
+
+- **Bedingungen**: Operator (und/oder, beliebig verschachtelt, jede Bedingung mit "nicht"), Zufällig (wird einmal
+  ausgewuerfelt, wenn der Rest erfuellt ist), Zeit (Modellzeit-Uhr oder echte Uhr, auch ueber Mitternacht),
+  Schnittstelle (Zentrale verbunden), Rückmeldung, Zubehör (Stellung), Zubehör-Reservierung (Adresse in einer
+  gestellten Fahrstrasse), Booster (Gleisspannung), Block frei, Block belegt, Blockzustand (frei, belegt, reserviert,
+  Zug darin), Block warten (Zug steht seit n Sekunden), Position im Block (faehrt ein, haelt), Zug, Zugrichtung,
+  Zugzustand (faehrt, steht, automatisch), Gattung (Antrieb der Lok im Block), Zugroute (Pendel oder Zugroute laeuft),
+  Spurweite, Lokomotive (Fahrstufe oder Funktion), Wagen (Bauart eines Wagens im Zug) und Lokomotive-Brennstoff.
+- **Befehle**: Zubehör schalten, Fahrstrasse stellen/aufloesen, Zugroute starten/anhalten, Lok fahren, anhalten,
+  Lokfunktion, Gleisspannung, Nothalt, Warten, Modellzeit-Uhr, Auftanken, Block freigeben, Meldung (im Protokoll).
+- **Brennstoff**: Dampfloks reichen 20 Minuten, Diesel und Triebwagen 60 Minuten volle Fahrt; langsamer haelt der
+  Vorrat entsprechend laenger, Elektroloks verbrauchen nichts. Der Reiter "Brennstoff" zeigt den Vorrat und tankt auf.
+- Fuer Gattung, Spurweite und Wagen haben Loks unter Fahrzeuge jetzt die Felder "Spurweite" und "Wagen im Zug".
+
+## Monitor
+
+Zusatzmodul, kostenlos, nur ueber das Burger-Menue unter "Werkzeuge" erreichbar. Zeigt live, was die App an die
+Zentrale sendet und was zurueckkommt: Zeit, Richtung, Klartext (z. B. "Lok 3: Fahrstufe 64 vorwärts") und die
+Rohdaten als Hex. Bei Z21/YD7001 werden die Pakete gedeutet, bei Textprotokollen (ECoS, DCC-EX) steht der Text
+selbst da. Filter fuer Gesendet, Empfangen und Meldungen, Anhalten, Leeren und Kopieren (z. B. fuer einen
+Fehlerbericht). Es bleiben die letzten 2000 Eintraege.
 
 ## Microsoft Store (MSIX)
 
@@ -174,4 +399,4 @@ Den privaten Schluessel gibt es nur ausserhalb des Repositorys. Lizenzen erstell
 
 - s88-Zuordnung an der YD7001 pruefen; falls noetig LocoNet-Adapter
 - Zentralen-Paket Stufe B (USB/seriell): Intellibox und Tams (P50X), Lenz LI-USB, LocoNet, Maerklin 6050
-- Phase 2: Rueckmelder-Modul, Lokverwaltung; Fahrstrassen im Gleisbild
+- Phase 2: Rueckmelder-Modul; gestellte Fahrstrassen im Stellpult hervorheben

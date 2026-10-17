@@ -19,6 +19,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:ui-shell"))
             api(project(":modules:trackplan:api"))
+            implementation(project(":modules:symbols:ui"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

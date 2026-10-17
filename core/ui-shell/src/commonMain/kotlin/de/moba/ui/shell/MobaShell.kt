@@ -1,5 +1,9 @@
 package de.moba.ui.shell
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.ui.layout.ContentScale
@@ -7,6 +11,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Check
@@ -49,9 +54,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.material3.FilledTonalIconToggleButton
+import androidx.compose.material.icons.outlined.Speed
+import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,10 +88,24 @@ object ShellUiState {
 
     /** Dialog "Lizenz" offen. */
     val licenseOpen = MutableStateFlow(false)
+
+    /** Rechte Leiste (Fahrpult) eingeblendet; anfangs aus, die Wahl bleibt gespeichert. */
+    val panelOpen = MutableStateFlow(false)
+
+    /** Modul-Id des offenen Werkzeugs aus dem Burger-Menue, z. B. Monitor; `null` = keins. */
+    val openTool = MutableStateFlow<String?>(null)
+
+    /** Kann die App Ansichten in eigenen Fenstern zeigen, etwa auf weiteren Bildschirmen? Unter Windows ja. */
+    val separateWindows = MutableStateFlow(false)
 }
 
 /** true, wenn die rechte Leiste (z. B. Fahrpult) sichtbar ist. Module zeigen ihre Inhalte sonst selbst an. */
 val LocalWideLayout = compositionLocalOf { false }
+
+/** Ist die rechte Leiste (Fahrpult) gerade zu sehen? Sonst zeigt z. B. "Fahren" das Fahrpult selbst. */
+val LocalPanelVisible = compositionLocalOf { false }
+
+private const val PREF_PANEL = "shell.fahrpult"
 
 /** Ab dieser Breite: Seitenleiste links, Fahrpult rechts (Tablet quer, PC). Darunter: Leiste unten (Handy). */
 private val WIDE_LAYOUT = 900.dp
@@ -95,7 +121,26 @@ fun MobaShell(
     panels: List<ModulePanel> = emptyList(),
     initialScreen: String? = null,
     imagePicker: ImagePicker? = null,
+    docks: List<ModuleDock> = emptyList(),
+    /** Werkzeuge, die nur ueber das Burger-Menue erreichbar sind (z. B. Monitor). */
+    tools: List<ModuleTool> = emptyList(),
+    /** Fragt vor dem Beenden nach ungespeicherten Aenderungen; [onExit] beendet dann die App. */
+    exitGuard: ExitGuard? = null,
+    onExit: () -> Unit = {},
+    /** Die Plattform kann eigene Fenster oeffnen, z. B. Gleisbilder auf weiteren Bildschirmen (Windows). */
+    separateWindows: Boolean = false,
+    /** Klaenge abspielen, z. B. fuer Sound-Zubehoer im Gleisbild. */
+    sound: SoundSupport? = null,
+    /** Unsichtbare Begleiter der Module, siehe [ModuleEffect]. */
+    effects: List<ModuleEffect> = emptyList(),
+    /** Anlagen-Dateien fuer das Datei-Menue (zweites Burger-Menue links); `null` = kein Datei-Menue. */
+    files: FileSupport? = null,
+    /** Weitere Burger-Menues der Module neben "Datei", z. B. "Aktionen". */
+    menus: List<ModuleMenu> = emptyList(),
+    /** Objektlisten fuer das Menue "Bearbeiten"; die Schnittstellen sind immer dabei. */
+    editors: List<ModuleEditor> = emptyList(),
 ) {
+    SideEffect { ShellUiState.separateWindows.value = separateWindows }
     val dark by app.darkTheme.collectAsState()
     val appearance by app.appearance.collectAsState()
     val background by app.backgroundImage.collectAsState()
@@ -107,20 +152,48 @@ fun MobaShell(
     fun active(id: String) = modules[id]?.state == ModuleState.ACTIVE
     val visible = screens.filter { active(it.moduleId) }
     val activePanels = panels.filter { active(it.moduleId) }
+    val activeDocks = docks.filter { active(it.moduleId) }
+    val activeTools = tools.filter { active(it.moduleId) }
+    val activeEffects = effects.filter { active(it.moduleId) }
+    val activeMenus = menus.filter { active(it.moduleId) }
+    val activeEditors = (listOf<ModuleEditor>(InterfaceEditor) + editors.filter { active(it.moduleId) }).sortedBy { it.order }
+    val openTool by ShellUiState.openTool.collectAsState()
+    LaunchedEffect(app) {
+        ShellUiState.panelOpen.value = app.preference(PREF_PANEL) == "an"
+        ShellUiState.panelOpen.drop(1).collect { app.setPreference(PREF_PANEL, if (it) "an" else "aus") }
+    }
+    val panelOpen by ShellUiState.panelOpen.collectAsState()
     var current by remember { mutableStateOf(initialScreen ?: OVERVIEW) }
+    // Immer die gerade sichtbaren Reiter fragen: ungespeichert und druckbar
+    val unsaved = { visible.mapNotNull { it.unsavedWork(app) } }
+    val latestUnsaved by rememberUpdatedState(unsaved)
+    val fileGuard = remember { FileGuard { latestUnsaved() } }
     if (current != OVERVIEW && visible.none { it.moduleId == current }) current = OVERVIEW
 
     MobaTheme(dark, appearance) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val wide = maxWidth >= WIDE_LAYOUT
-                CompositionLocalProvider(LocalWideLayout provides wide) {
+                val showPanel = wide && panelOpen && activePanels.isNotEmpty()
+                CompositionLocalProvider(
+                    LocalWideLayout provides wide,
+                    LocalImagePicker provides imagePicker,
+                    LocalSoundSupport provides sound,
+                    LocalPanelVisible provides showPanel,
+                ) {
+                activeEffects.forEach { effect -> key(effect.moduleId) { effect.Run(app) } }
                 Column(Modifier.fillMaxSize()) {
                     TopBar(
                         app,
+                        files = files,
+                        fileMenu = { support -> FileMenu(support, compact = !wide, unsaved = unsaved, run = fileGuard::run) },
+                        menus = activeMenus,
+                        editors = activeEditors,
                         compact = !wide,
+                        panelToggle = wide && activePanels.isNotEmpty(),
                         destinations = listOf(Destination(OVERVIEW, "Übersicht", Icons.Outlined.Dashboard)) +
                             visible.map { Destination(it.moduleId, it.title, it.icon) },
+                        tools = activeTools.map { Destination(it.moduleId, it.title, it.icon) },
                         current = current,
                         onNavigate = { current = it },
                     )
@@ -161,30 +234,41 @@ fun MobaShell(
                                 if (screen == null) Overview(app, modules, wide) else screen.Content(app)
                             }
                         }
-                        if (wide && activePanels.isNotEmpty()) {
+                        if (showPanel) {
                             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             Surface(
                                 Modifier.width(380.dp).fillMaxHeight(),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                             ) {
-                                Column(Modifier.padding(20.dp)) { activePanels.forEach { it.Content(app) } }
+                                // Scrollt, damit auch viele Funktionstasten (bis F31) Platz haben
+                                Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) { activePanels.forEach { it.Content(app) } }
                             }
                         }
                     }
+                    activeDocks.forEach { dock ->
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        dock.Content(app)
+                    }
                     if (!wide) {
+                        // Ab sechs Eintraegen kleinere Beschriftung, damit nichts umbricht
+                        val compact = visible.size + 1 > 5
+                        // Ab sieben Eintraegen nur noch beim gewaehlten Reiter beschriften, sonst wird alles abgekuerzt
+                        val crowded = visible.size + 1 > 6
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                             NavigationBarItem(
                                 selected = current == OVERVIEW,
                                 onClick = { current = OVERVIEW },
                                 icon = { Icon(Icons.Outlined.Dashboard, null) },
-                                label = { Text("Übersicht") },
+                                label = { NavLabel("Übersicht", compact) },
+                                alwaysShowLabel = !crowded,
                             )
                             visible.forEach { screen ->
                                 NavigationBarItem(
                                     selected = current == screen.moduleId,
                                     onClick = { current = screen.moduleId },
                                     icon = { Icon(screen.icon, null) },
-                                    label = { Text(screen.title) },
+                                    label = { NavLabel(screen.title, compact) },
+                                    alwaysShowLabel = !crowded,
                                 )
                             }
                         }
@@ -198,17 +282,48 @@ fun MobaShell(
             if (licenseOpen) {
                 LicenseDialog(app, onDismiss = { ShellUiState.licenseOpen.value = false })
             }
+            activeTools.firstOrNull { it.moduleId == openTool }?.let { tool ->
+                ToolWindow(app, tool) { ShellUiState.openTool.value = null }
+            }
+            activeMenus.forEach { menu -> key(menu.moduleId) { menu.Dialogs(app) } }
+            EditWindow(app, activeEditors)
+            if (files != null) {
+                FileDialogs(files, unsaved, { visible.flatMap { it.printables(app) } }, fileGuard)
+            }
+            if (exitGuard != null && exitGuard.asking) {
+                ExitDialog(visible.mapNotNull { it.unsavedWork(app) }, exitGuard, onExit)
+            }
         }
     }
 }
 
 private class Destination(val id: String, val title: String, val icon: ImageVector)
 
+/** Grosses Fenster ueber der App fuer ein Werkzeug aus dem Burger-Menue. */
+@Composable
+private fun ToolWindow(app: MobaApp, tool: ModuleTool, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f),
+        ) {
+            tool.Content(app, onClose)
+        }
+    }
+}
+
 @Composable
 private fun TopBar(
     app: MobaApp,
+    files: FileSupport?,
+    fileMenu: @Composable (FileSupport) -> Unit,
+    menus: List<ModuleMenu>,
+    editors: List<ModuleEditor>,
     compact: Boolean,
+    panelToggle: Boolean,
     destinations: List<Destination>,
+    tools: List<Destination>,
     current: String,
     onNavigate: (String) -> Unit,
 ) {
@@ -224,9 +339,17 @@ private fun TopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Datei-Menue ganz links wie in Desktop-Programmen
+            files?.let { fileMenu(it) }
+            EditMenu(editors, compact)
+            menus.forEach { menu -> key(menu.moduleId) { MenuButton(app, menu, compact) } }
             Icon(Icons.Filled.Train, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
             if (!compact) {
                 Text("Modellbahn-Steuerung", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                files?.let { support ->
+                    val layout by support.files.current.collectAsState()
+                    Text(layout.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
                 Spacer(Modifier.width(8.dp))
             }
 
@@ -259,7 +382,18 @@ private fun TopBar(
                 }
             }
 
-            BurgerMenu(app, dark, destinations, current, onNavigate)
+            // Fahrpult rechts ein- und ausblenden
+            if (panelToggle) {
+                val open by ShellUiState.panelOpen.collectAsState()
+                FilledTonalIconToggleButton(
+                    checked = open,
+                    onCheckedChange = { ShellUiState.panelOpen.value = it },
+                ) {
+                    Icon(Icons.Outlined.Speed, if (open) "Fahrpult ausblenden" else "Fahrpult einblenden")
+                }
+            }
+
+            BurgerMenu(app, dark, destinations, tools, current, onNavigate)
 
             // Nothalt: immer sichtbar, nie lizenzpflichtig
             Button(
@@ -277,12 +411,33 @@ private fun TopBar(
     }
 }
 
+/** Burger-Menue eines Moduls in der oberen Leiste; schmal nur das Symbol. */
+@Composable
+private fun MenuButton(app: MobaApp, menu: ModuleMenu, compact: Boolean) {
+    val open by menu.expanded.collectAsState()
+    Box {
+        if (compact) {
+            IconButton(onClick = { menu.expanded.value = !open }) { Icon(menu.icon, menu.title) }
+        } else {
+            TextButton(onClick = { menu.expanded.value = !open }) {
+                Icon(menu.icon, null, Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(menu.title, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { menu.expanded.value = false }, modifier = Modifier.widthIn(min = 280.dp)) {
+            with(menu) { Items(app) { menu.expanded.value = false } }
+        }
+    }
+}
+
 /** Menue neben "Gleis an/aus": Ansichten wechseln, Erscheinungsbild, hell/dunkel. */
 @Composable
 private fun BurgerMenu(
     app: MobaApp,
     dark: Boolean,
     destinations: List<Destination>,
+    tools: List<Destination>,
     current: String,
     onNavigate: (String) -> Unit,
 ) {
@@ -317,6 +472,25 @@ private fun BurgerMenu(
                     },
                 )
             }
+            if (tools.isNotEmpty()) {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                Text(
+                    "Werkzeuge",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+                tools.forEach { tool ->
+                    DropdownMenuItem(
+                        text = { Text("${tool.title} …") },
+                        leadingIcon = { Icon(tool.icon, null) },
+                        onClick = {
+                            close()
+                            ShellUiState.openTool.value = tool.id
+                        },
+                    )
+                }
+            }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             DropdownMenuItem(
                 text = { Text("Erscheinungsbild …") },
@@ -348,4 +522,15 @@ private fun BurgerMenu(
             )
         }
     }
+}
+
+@Composable
+private fun NavLabel(text: String, compact: Boolean) {
+    Text(
+        text,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+    )
 }

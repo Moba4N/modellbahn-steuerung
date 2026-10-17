@@ -51,7 +51,7 @@ import de.moba.core.station.Direction
 import de.moba.core.station.LocoState
 import de.moba.modules.driving.api.DRIVING_MODULE_ID
 import de.moba.modules.driving.api.DrivingService
-import de.moba.ui.shell.LocalWideLayout
+import de.moba.ui.shell.LocalPanelVisible
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.ModulePanel
 import de.moba.ui.shell.ModuleScreen
@@ -70,14 +70,15 @@ object DrivingScreen : ModuleScreen {
     override val title = "Fahren"
     override val icon = Icons.Outlined.Speed
 
+
     @Composable
     override fun Content(app: MobaApp) {
         val session by app.session.collectAsState()
         val service = session?.host?.service(DrivingService::class) ?: return
-        val panelVisible = LocalWideLayout.current
+        val panelVisible = LocalPanelVisible.current
         val selected by DrivingUiState.selected.collectAsState()
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // Auf schmalen Bildschirmen gibt es keine rechte Leiste: Fahrpult oben zeigen.
+            // Ohne rechte Leiste (Handy oder ausgeblendet): Fahrpult oben zeigen.
             if (!panelVisible) selected?.let { ThrottleFor(app, it, service) }
             LocoGrid(app, service)
         }
@@ -111,10 +112,15 @@ object DrivingPanel : ModulePanel {
 private fun ThrottleFor(app: MobaApp, address: Int, service: DrivingService) {
     val states by service.locos.collectAsState()
     val layout by app.layout.layout.collectAsState()
+    val loco = layout.locos.firstOrNull { it.address == address }
     Throttle(
-        name = layout.locos.firstOrNull { it.address == address }?.name ?: "Lok $address",
+        app = app,
+        name = loco?.name ?: "Lok $address",
         state = states[address] ?: LocoState(address),
         service = service,
+        loco = loco,
+        // Schliessen nimmt die Lok nur aus dem Fahrpult; sie faehrt weiter, wie sie gerade faehrt.
+        onClose = { DrivingUiState.selected.value = null },
     )
 }
 
@@ -150,7 +156,8 @@ private fun LocoGrid(app: MobaApp, service: DrivingService) {
                     name = names[address] ?: "Lok $address",
                     state = states[address] ?: LocoState(address),
                     selected = selected == address,
-                    onClick = { DrivingUiState.selected.value = address },
+                    // Nochmal auf die gewaehlte Lok tippen schliesst das Fahrpult wieder
+                    onClick = { DrivingUiState.selected.value = if (selected == address) null else address },
                 )
             }
         }

@@ -5,6 +5,9 @@ import de.moba.core.station.Direction
 import de.moba.core.station.LocoState
 import de.moba.core.station.StationEvent
 import de.moba.core.station.StationException
+import de.moba.core.station.TrafficPacket
+import de.moba.core.station.TrafficSource
+import de.moba.core.station.asPrintableText
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -30,9 +33,19 @@ abstract class StreamStation(
     private val streamFactory: suspend () -> ByteStream,
     private val dispatcher: CoroutineDispatcher,
     private val connectTimeoutMillis: Long,
-) : CommandStation {
+) : CommandStation, TrafficSource {
     protected val eventFlow = MutableSharedFlow<StationEvent>(extraBufferCapacity = 256)
     override val events: SharedFlow<StationEvent> = eventFlow
+
+    private val trafficFlow = MutableSharedFlow<TrafficPacket>(extraBufferCapacity = 512)
+    override val traffic: SharedFlow<TrafficPacket> = trafficFlow
+
+    /** Lesbare Deutung eines Pakets fuer den Monitor; Standard: Klartext bei Textprotokollen. */
+    protected open fun describe(bytes: ByteArray, outgoing: Boolean): String? = bytes.asPrintableText()
+
+    private fun tap(bytes: ByteArray, outgoing: Boolean) {
+        if (trafficFlow.subscriptionCount.value > 0) trafficFlow.tryEmit(TrafficPacket(outgoing, bytes, runCatching { describe(bytes, outgoing) }.getOrNull()))
+    }
 
     private var stream: ByteStream? = null
     private var ready: CompletableDeferred<Unit>? = null
@@ -55,6 +68,7 @@ abstract class StreamStation(
         s.launch {
             while (isActive) {
                 val bytes = st.read() ?: break
+                tap(bytes, outgoing = false)
                 onBytes(bytes)
             }
             if (stream === st) {
@@ -97,6 +111,7 @@ abstract class StreamStation(
     protected suspend fun write(bytes: ByteArray) {
         val st = stream ?: throw StationException("Nicht mit $name verbunden")
         st.write(bytes)
+        tap(bytes, outgoing = true)
     }
 
     protected suspend fun writeLine(line: String) = write("$line\n".encodeToByteArray())

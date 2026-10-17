@@ -103,6 +103,19 @@ private fun AppearanceSettings(app: MobaApp, picker: ImagePicker?) {
         }
     }
 
+    Section("Akzentfarbe") {
+        Text(
+            "Färbt Knöpfe, Auswahl, Regler und Tacho in der ganzen App.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AccentColor.entries.forEach { accent ->
+                AccentTile(accent, appearance.style, dark, selected = appearance.accent == accent) { update { copy(accent = accent) } }
+            }
+        }
+    }
+
     Section("Schriftart") {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FontChoice.entries.forEach { font ->
@@ -224,6 +237,29 @@ private fun StyleTile(style: DesignStyle, dark: Boolean, selected: Boolean, onCl
             if (selected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         }
         Text(style.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 2)
+    }
+}
+
+/** Farbkreis mit Namen; "Design" zeigt die Farbe des gewaehlten Designs. */
+@Composable
+private fun AccentTile(accent: AccentColor, style: DesignStyle, dark: Boolean, selected: Boolean, onClick: () -> Unit) {
+    val color = scheme(style, dark).withAccent(accent, dark).primary
+    Column(
+        Modifier.width(72.dp).clip(MaterialTheme.shapes.small).clickable(onClick = onClick).padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(color)
+                .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Icon(Icons.Filled.Check, "Gewählt", tint = scheme(style, dark).withAccent(accent, dark).onPrimary, modifier = Modifier.size(18.dp))
+        }
+        Text(accent.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 

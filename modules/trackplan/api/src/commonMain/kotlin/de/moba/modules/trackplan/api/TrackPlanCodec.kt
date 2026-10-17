@@ -6,9 +6,10 @@ package de.moba.modules.trackplan.api
  * ```
  * MOBA-GLEISBILD 1
  * plan  <id>  <name>  <breite>  <hoehe>
- * tile  <x>  <y>  <FORM>  <drehung>  <adresse>  <s88-modul>  <s88-kontakt>  <text>
+ * tile  <x>  <y>  <FORM>  <drehung>  <adresse>  <s88-modul>  <s88-kontakt>  <text>  <symbol>  <einstellungen>
  * ```
  * Leere Felder stehen fuer "nicht gesetzt". Unbekannte Formen werden beim Lesen uebersprungen.
+ * Die Zubehoer-Einstellungen stehen als "schluessel=wert;schluessel=wert" im letzten Feld; aeltere Dateien haben es nicht.
  */
 object TrackPlanCodec {
     private const val HEADER = "MOBA-GLEISBILD 1"
@@ -21,8 +22,8 @@ object TrackPlanCodec {
                 appendLine(
                     listOf(
                         "tile", t.x, t.y, t.shape.name, t.rotation,
-                        t.address ?: "", t.feedbackModule ?: "", t.feedbackContact ?: "", escape(t.text),
-                    ).joinToString("\t"),
+                        t.address ?: "", t.feedbackModule ?: "", t.feedbackContact ?: "", escape(t.text), escape(t.symbol),
+                    ).plus(if (t.props.isEmpty()) emptyList() else listOf(escape(encodeProps(t.props)))).joinToString("\t"),
                 )
             }
         }
@@ -55,6 +56,8 @@ object TrackPlanCodec {
                             feedbackModule = f.getOrNull(6)?.toIntOrNull(),
                             feedbackContact = f.getOrNull(7)?.toIntOrNull(),
                             text = unescape(f.getOrNull(8).orEmpty()),
+                            symbol = unescape(f.getOrNull(9).orEmpty()),
+                            props = decodeProps(unescape(f.getOrNull(10).orEmpty())),
                         ),
                     )
                 }
@@ -62,6 +65,41 @@ object TrackPlanCodec {
         }
         return plans
     }
+
+    internal fun encodeProps(props: Map<String, String>): String =
+        props.entries.sortedBy { it.key }.filter { it.value.isNotEmpty() }.joinToString(";") { (k, v) -> "${escapeProp(k)}=${escapeProp(v)}" }
+
+    internal fun decodeProps(text: String): Map<String, String> {
+        if (text.isEmpty()) return emptyMap()
+        val result = LinkedHashMap<String, String>()
+        val key = StringBuilder()
+        val value = StringBuilder()
+        var inValue = false
+        fun flush() {
+            if (key.isNotEmpty() && value.isNotEmpty()) result[key.toString()] = value.toString()
+            key.clear()
+            value.clear()
+            inValue = false
+        }
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                c == '\\' && i + 1 < text.length -> {
+                    (if (inValue) value else key).append(text[i + 1])
+                    i++
+                }
+                c == '=' && !inValue -> inValue = true
+                c == ';' -> flush()
+                else -> (if (inValue) value else key).append(c)
+            }
+            i++
+        }
+        flush()
+        return result
+    }
+
+    private fun escapeProp(s: String) = s.replace("\\", "\\\\").replace(";", "\\;").replace("=", "\\=")
 
     private fun escape(s: String) = s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
 

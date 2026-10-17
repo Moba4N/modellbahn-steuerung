@@ -48,6 +48,8 @@ class TrackPlanTest {
                     TrackTile(3, 4, TrackShape.TURNOUT_THREE_WAY, 2, address = 12),
                     TrackTile(5, 4, TrackShape.FEEDBACK, 6, feedbackModule = 2, feedbackContact = 16),
                     TrackTile(0, 0, TrackShape.TEXT, text = "Gleis 1 \\ 2"),
+                    TrackTile(7, 4, TrackShape.SIGNAL, 2, address = 5, symbol = "signal:de-ks"),
+                    TrackTile(8, 1, TrackShape.SYMBOL, address = 40, symbol = "sym-3"),
                 ),
             ),
             TrackPlan("b", "Leer"),
@@ -55,6 +57,14 @@ class TrackPlanTest {
         val back = TrackPlanCodec.decode(TrackPlanCodec.encode(plans))
         assertEquals(plans.map { it.copy(tiles = it.tiles.toSet().toList()) }.map { it.tiles.toSet() }, back.map { it.tiles.toSet() })
         assertEquals(plans.map { it.copy(tiles = emptyList()) }, back.map { it.copy(tiles = emptyList()) })
+    }
+
+    @Test
+    fun olderFilesWithoutSymbolStillLoad() {
+        val text = "MOBA-GLEISBILD 1\nplan\ta\tAlt\t10\t5\ntile\t1\t1\tSIGNAL\t2\t7\t\t\t\n"
+        val tile = TrackPlanCodec.decode(text).single().tiles.single()
+        assertEquals(7, tile.address)
+        assertEquals("", tile.symbol)
     }
 
     @Test
@@ -70,5 +80,37 @@ class TrackPlanTest {
         assertEquals(21, shrunk.height)
         assertEquals(2, shrunk.tiles.size)
         assertEquals(TrackPlan.MIN_SIZE, TrackPlan("leer", "Leer").fitTo(1, 1).width)
+    }
+
+    @Test
+    fun areaMoveCopyAndDelete() {
+        val plan = TrackPlan("p", "P", 10, 6, listOf(
+            TrackTile(1, 1, TrackShape.STRAIGHT, 2), TrackTile(2, 1, TrackShape.TURNOUT_LEFT, 2, address = 5),
+            TrackTile(4, 1, TrackShape.BUFFER_STOP), TrackTile(1, 4, TrackShape.STRAIGHT),
+        ))
+        val area = plan.tilesIn(3, 2, 0, 0).map { it.x to it.y }.toSet()
+        assertEquals(setOf(1 to 1, 2 to 1), area)
+
+        val moved = plan.moveTiles(area, 2, 0)!!
+        assertEquals(TrackShape.STRAIGHT, moved.tileAt(3, 1)!!.shape)
+        assertEquals(5, moved.tileAt(4, 1)!!.address) // ersetzt den Prellbock
+        assertNull(moved.tileAt(1, 1))
+        assertEquals(3, moved.tiles.size)
+        assertNull(plan.moveTiles(area, -2, 0), "fiele aus dem Raster")
+
+        val clip = plan.tilesIn(1, 1, 2, 1).map { it.copy(x = it.x - 1, y = it.y - 1) }
+        val pasted = plan.paste(clip, 8, 5)
+        assertEquals(TrackShape.STRAIGHT, pasted.tileAt(8, 5)!!.shape)
+        assertNull(pasted.tileAt(10, 5)) // ausserhalb faellt weg
+        assertEquals(1, plan.removeAll(area + (4 to 1)).tiles.size)
+    }
+
+    @Test
+    fun clockFootprintAndFormat() {
+        val clock = TrackTile(2, 2, TrackShape.CLOCK)
+        assertEquals(Footprint(2, 2, 2, 2), clock.footprint())
+        assertEquals(clock, TrackPlan("p", "P", tiles = listOf(clock)).objectAt(3, 3))
+        assertEquals("07:05", ModelClockState.format(7 * 60 + 5.9))
+        assertEquals(6 * 60.0, ModelClockState().minutesAt(99_999))
     }
 }

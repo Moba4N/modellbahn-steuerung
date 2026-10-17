@@ -128,6 +128,7 @@ object DecoderScreen : ModuleScreen {
     override val title = "Decoder"
     override val icon = Icons.Outlined.Memory
 
+
     @Composable
     override fun Content(app: MobaApp) {
         val session by app.session.collectAsState()

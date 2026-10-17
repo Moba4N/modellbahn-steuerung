@@ -1,6 +1,13 @@
 package de.moba.modules.vehicles.ui
 
 import androidx.compose.foundation.BorderStroke
+import de.moba.ui.shell.decodeImage
+import de.moba.ui.shell.LocalImagePicker
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,8 +68,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.moba.modules.vehicles.api.DecoderProtocol
 import de.moba.modules.vehicles.api.Epoch
+import de.moba.modules.vehicles.api.Gauge
 import de.moba.modules.vehicles.api.Fleet
 import de.moba.modules.vehicles.api.LocoRecord
+import de.moba.core.model.LocoDynamics
+import androidx.compose.material3.Switch
 import de.moba.modules.vehicles.api.Traction
 import de.moba.modules.vehicles.api.VEHICLES_MODULE_ID
 import de.moba.modules.vehicles.api.VehicleGroup
@@ -75,6 +85,8 @@ import de.moba.ui.shell.LocalWideLayout
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.ModuleScreen
+import de.moba.ui.shell.PrintItem
+import de.moba.ui.shell.PrintTable
 import de.moba.ui.shell.StatusPill
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -102,6 +114,35 @@ object VehiclesScreen : ModuleScreen {
     override val moduleId = VEHICLES_MODULE_ID
     override val title = "Fahrzeuge"
     override val icon = Icons.Outlined.DirectionsRailway
+
+    override fun printables(app: MobaApp): List<PrintItem> {
+        val service = app.session.value?.host?.service(VehicleService::class) ?: return emptyList()
+        val fleet = service.fleet.value
+        val items = mutableListOf<PrintItem>()
+        if (fleet.locos.isNotEmpty()) {
+            items += PrintItem("Lokliste") {
+                PrintTable(
+                    "Lokliste",
+                    listOf("Name", "Adresse", "Baureihe", "Bahn", "Vmax", "Hersteller", "Art.-Nr."),
+                    fleet.locos.sortedBy { it.address }.map { l ->
+                        listOf(l.name, l.address.toString(), l.series, l.railway, l.vmax?.let { "$it km/h" }.orEmpty(), l.manufacturer, l.articleNumber)
+                    },
+                )
+            }
+        }
+        if (fleet.wagons.isNotEmpty()) {
+            items += PrintItem("Wagenliste") {
+                PrintTable(
+                    "Wagenliste",
+                    listOf("Gattung", "Name", "Bahn", "Anzahl", "Länge", "Hersteller", "Art.-Nr."),
+                    fleet.wagons.sortedBy { it.code }.map { w ->
+                        listOf(w.code, w.name, w.railway, w.count.toString(), w.lengthMm?.let { "$it mm" }.orEmpty(), w.manufacturer, w.articleNumber)
+                    },
+                )
+            }
+        }
+        return items
+    }
 
     @Composable
     override fun Content(app: MobaApp) {
@@ -204,6 +245,7 @@ private fun VehicleList(service: VehicleService, fleet: Fleet, group: VehicleGro
             fleet.locos.forEach { loco ->
                 VehicleCard(
                     icon = Icons.Filled.Train,
+                    image = rememberVehicleImage(service, loco.id),
                     title = loco.name,
                     subtitle = listOf(
                         "Adresse ${loco.address}",
@@ -223,6 +265,7 @@ private fun VehicleList(service: VehicleService, fleet: Fleet, group: VehicleGro
             fleet.wagons(group).forEach { wagon ->
                 VehicleCard(
                     icon = group.icon(),
+                    image = rememberVehicleImage(service, wagon.id),
                     title = wagon.code + if (wagon.name.isNotBlank()) "  ${wagon.name}" else "",
                     subtitle = listOf(
                         wagon.category?.label,
@@ -247,6 +290,8 @@ private fun NewButton(service: VehicleService, group: VehicleGroup) {
         Button(onClick = {
             say(null)
             val id = service.newId(group)
+            // Ein altes Foto unter derselben Id (z. B. abgebrochener Entwurf) nicht uebernehmen
+            if (service.image(id) != null) service.setImage(id, null)
             VehiclesUiState.draft.value = when (group) {
                 VehicleGroup.LOCOS -> VehicleDraft.Loco(LocoRecord(id, "", 3), isNew = true)
                 else -> VehicleDraft.Wagon(WagonClass(id, group, ""), isNew = true)
@@ -270,6 +315,7 @@ private fun NewButton(service: VehicleService, group: VehicleGroup) {
 @Composable
 private fun VehicleCard(
     icon: ImageVector,
+    image: ImageBitmap?,
     title: String,
     subtitle: String,
     trailing: String?,
@@ -287,10 +333,19 @@ private fun VehicleCard(
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(36.dp).clip(CircleShape).background(primary.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center,
-            ) { Icon(icon, null, tint = primary, modifier = Modifier.size(20.dp)) }
+            if (image != null) {
+                Image(
+                    image,
+                    null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(width = 64.dp, height = 40.dp).clip(MaterialTheme.shapes.small),
+                )
+            } else {
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape).background(primary.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(icon, null, tint = primary, modifier = Modifier.size(20.dp)) }
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -360,8 +415,17 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
     var functions by remember {
         mutableStateOf(draft.record.functions.toSortedMap().entries.joinToString("\n") { "F${it.key} ${it.value}" })
     }
+    val dyn = draft.record.dynamics
+    var cab by remember { mutableStateOf(dyn.cab) }
+    var inertia by remember { mutableStateOf(dyn.inertia) }
+    var accel by remember { mutableStateOf(formatSeconds(dyn.accelerationSeconds)) }
+    var brake by remember { mutableStateOf(formatSeconds(dyn.brakingSeconds)) }
+    var period by remember { mutableStateOf(dyn.periodMs.toString()) }
+    var offset by remember { mutableStateOf(dyn.feedbackOffsetMm.toString()) }
+    var reaction by remember { mutableStateOf(dyn.reactionDelayMs.toString()) }
 
     FormHeader(if (draft.isNew) "Neue Lok" else r.name.ifBlank { "Lok" })
+    PhotoSection(service, r.id)
     TextInput("Name", r.name) { r = r.copy(name = it) }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         NumberInput("Adresse", address, Modifier.weight(1f)) { address = it }
@@ -383,6 +447,8 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
         NumberInput("Vmax (km/h)", vmax, Modifier.weight(1f)) { vmax = it }
         NumberInput("Länge (mm)", length, Modifier.weight(1f)) { length = it }
     }
+    Choice("Spurweite", Gauge.entries, r.gauge, { it.label }, Modifier.fillMaxWidth(), optional = true) { r = r.copy(gauge = it) }
+    ConsistPicker(service, r.consist) { r = r.copy(consist = it) }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         TextInput("Hersteller", r.manufacturer, Modifier.weight(1f)) { r = r.copy(manufacturer = it) }
         TextInput("Artikelnummer", r.articleNumber, Modifier.weight(1f)) { r = r.copy(articleNumber = it) }
@@ -394,11 +460,32 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
         minLines = 3,
         modifier = Modifier.fillMaxWidth(),
     )
+
+    // Fahreigenschaften: Fuehrerstand und Traegheit fuers Fahrpult, Offset und Reaktion fuers genaue Halten
+    Text("Fahreigenschaften", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+    SwitchRow("Führerstand", "Fahrpult mit km/h-Tacho, Fahrhebel, Betriebs- und Schnellbremse", cab) { cab = it }
+    SwitchRow("Trägheitssimulation", "Die Lok fährt langsam an und bremst langsam, wie ein schwerer Zug", inertia) { inertia = it }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        DecimalInput("Anfahrzeit (s)", accel, Modifier.weight(1f), enabled = inertia) { accel = it }
+        DecimalInput("Bremszeit (s)", brake, Modifier.weight(1f), enabled = inertia) { brake = it }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        NumberInput("Zeitraum (ms)", period, Modifier.weight(1f), enabled = inertia) { period = it }
+        NumberInput("Rückmelde-Offset (mm)", offset, Modifier.weight(1f)) { offset = it }
+    }
+    NumberInput("Reaktionsverzögerung (ms)", reaction, Modifier.fillMaxWidth()) { reaction = it }
+    Text(
+        "Anfahr- und Bremszeit gelten von 0 bis zur Höchststufe; der Zeitraum ist der Abstand zwischen zwei Fahrstufen. " +
+            "Am Haltemelder fährt die Automatik noch den Rückmelde-Offset weiter und hält um die Reaktionsverzögerung früher.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     TextInput("Notiz", r.notes, singleLine = false) { r = r.copy(notes = it) }
 
     FormButtons(
         isNew = draft.isNew,
         onSave = {
+            val defaults = LocoDynamics()
             service.saveLoco(
                 r.copy(
                     name = r.name.trim(),
@@ -406,10 +493,20 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
                     vmax = vmax.toIntOrNull(),
                     lengthMm = length.toIntOrNull(),
                     functions = parseFunctions(functions),
+                    dynamics = LocoDynamics(
+                        cab = cab,
+                        inertia = inertia,
+                        accelerationSeconds = parseSeconds(accel) ?: defaults.accelerationSeconds,
+                        brakingSeconds = parseSeconds(brake) ?: defaults.brakingSeconds,
+                        periodMs = period.toIntOrNull() ?: defaults.periodMs,
+                        feedbackOffsetMm = offset.toIntOrNull() ?: 0,
+                        reactionDelayMs = reaction.toIntOrNull() ?: 0,
+                    ).validated(),
                 ),
             )
         },
         onDelete = { service.deleteLoco(r.id) },
+        onCancel = { if (draft.isNew && service.image(r.id) != null) service.setImage(r.id, null) },
     )
 }
 
@@ -429,6 +526,7 @@ private fun WagonForm(service: VehicleService, draft: VehicleDraft.Wagon) {
     val group = r.group
 
     FormHeader(if (draft.isNew) "Neue ${group.singular}" else r.code.ifBlank { group.singular })
+    PhotoSection(service, r.id)
     if (draft.isNew) {
         Choice("Vorlage", WagonTemplates.of(group), null, { "${it.code} – ${it.name}" }, Modifier.fillMaxWidth()) { t ->
             if (t != null) {
@@ -462,11 +560,12 @@ private fun WagonForm(service: VehicleService, draft: VehicleDraft.Wagon) {
             service.saveWagon(r.copy(code = r.code.trim(), lengthMm = length.toIntOrNull(), count = count.toIntOrNull() ?: 0))
         },
         onDelete = { service.deleteWagon(r.id) },
+        onCancel = { if (draft.isNew && service.image(r.id) != null) service.setImage(r.id, null) },
     )
 }
 
 @Composable
-private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit) {
+private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit, onCancel: () -> Unit = {}) {
     Spacer(Modifier.size(4.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(onClick = {
@@ -485,6 +584,7 @@ private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit)
             Text("Speichern")
         }
         TextButton(onClick = {
+            onCancel()
             VehiclesUiState.draft.value = null
             say(null)
         }) { Text("Abbrechen") }
@@ -500,7 +600,7 @@ private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit)
 }
 
 @Composable
-private fun TextInput(
+internal fun TextInput(
     label: String,
     value: String,
     modifier: Modifier = Modifier.fillMaxWidth(),
@@ -518,20 +618,71 @@ private fun TextInput(
 }
 
 @Composable
-private fun NumberInput(label: String, value: String, modifier: Modifier, onChange: (String) -> Unit) {
+internal fun NumberInput(label: String, value: String, modifier: Modifier, enabled: Boolean = true, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { onChange(it.filter(Char::isDigit).take(5)) },
         label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         singleLine = true,
+        enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = modifier,
     )
 }
 
+/** Sekunden mit Komma oder Punkt, z. B. "7,5". */
+@Composable
+private fun DecimalInput(label: String, value: String, modifier: Modifier, enabled: Boolean = true, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { text -> onChange(text.filter { it.isDigit() || it == ',' || it == '.' }.take(5)) },
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        singleLine = true,
+        enabled = enabled,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+internal fun parseSeconds(text: String): Double? = text.replace(',', '.').toDoubleOrNull()
+
+internal fun formatSeconds(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString().replace('.', ',')
+
+/** Wagen, die die Lok gerade zieht (fuer Bedingungen "Wagen" in Aktionen); Auswahl aus den Wagengattungen. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ConsistPicker(service: VehicleService, selected: List<String>, onChange: (List<String>) -> Unit) {
+    val fleet by service.fleet.collectAsState()
+    if (fleet.wagons.isEmpty()) return
+    Text("Wagen im Zug", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        fleet.wagons.forEach { w ->
+            val on = w.id in selected
+            FilterChip(
+                selected = on,
+                onClick = { onChange(if (on) selected - w.id else selected + w.id) },
+                label = { Text(listOf(w.code, w.name).filter { it.isNotBlank() }.joinToString(" ")) },
+            )
+        }
+    }
+}
+
 /** Auswahlfeld mit Menue; mit [optional] gibt es einen Eintrag "keine Angabe". */
 @Composable
-private fun <T> Choice(
+internal fun <T> Choice(
     label: String,
     options: List<T>,
     selected: T?,
@@ -575,6 +726,58 @@ private fun <T> Choice(
                     },
                 )
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Fotos
+
+/** Das Foto eines Fahrzeugs als Bild; laedt nach jeder Aenderung neu. */
+@Composable
+private fun rememberVehicleImage(service: VehicleService, id: String): ImageBitmap? {
+    val version by service.imageVersion.collectAsState()
+    return remember(id, version) { service.image(id)?.let(::decodeImage) }
+}
+
+/** Foto oben im Formular: anzeigen, waehlen (Windows: Dateidialog, Android: Galerie) oder entfernen. */
+@Composable
+private fun PhotoSection(service: VehicleService, id: String) {
+    val picker = LocalImagePicker.current
+    val image = rememberVehicleImage(service, id)
+    Surface(
+        Modifier.fillMaxWidth().height(180.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        if (image != null) {
+            Image(image, "Foto", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        } else {
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Noch kein Foto", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(enabled = picker != null, onClick = {
+            picker?.pick { bytes ->
+                if (bytes == null) return@pick
+                when {
+                    decodeImage(bytes) == null -> say("Diese Datei ist kein lesbares Bild (PNG, JPEG, WebP, BMP oder GIF).")
+                    else -> runCatching { service.setImage(id, bytes) }.onFailure { say(it.message) }.onSuccess { say(null) }
+                }
+            }
+        }) {
+            Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(if (image == null) "Foto hinzufügen" else "Foto ändern")
+        }
+        if (image != null) {
+            TextButton(onClick = { service.setImage(id, null) }) { Text("Foto entfernen") }
         }
     }
 }

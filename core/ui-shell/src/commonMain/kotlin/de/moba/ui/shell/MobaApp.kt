@@ -94,6 +94,11 @@ class MobaApp(
         settings.set(KEY_THEME, if (dark) "dark" else "light")
     }
 
+    /** Ansichtseinstellung eines Moduls lesen, z. B. die Gleisgroesse im Gleisbild. Bleibt ueber Neustarts erhalten. */
+    fun preference(key: String): String? = settings.get(KEY_PREFERENCE + key)?.takeIf { it.isNotEmpty() }
+
+    fun setPreference(key: String, value: String) = settings.set(KEY_PREFERENCE + key, value)
+
     private val _activeLicense = MutableStateFlow(
         settings.get(KEY_LICENSE)?.let { key -> (licenseVerifier?.check(key, today()) as? LicenseCheck.Valid)?.license },
     )
@@ -126,6 +131,9 @@ class MobaApp(
         restartModules()
     }
 
+    /** Startet alle Module neu, z. B. nachdem eine andere Anlage geoeffnet oder eine Sicherung zurueckgespielt wurde. */
+    fun reloadModules() = restartModules()
+
     private fun restartModules() {
         _session.value?.config?.let { connect(it) }
     }
@@ -136,6 +144,7 @@ class MobaApp(
         Appearance(
             style = enumSetting(KEY_STYLE, DesignStyle.MODERN),
             font = enumSetting(KEY_FONT, FontChoice.STANDARD),
+            accent = enumSetting(KEY_ACCENT, AccentColor.STANDARD),
             textSize = enumSetting(KEY_TEXT_SIZE, TextSize.NORMAL),
             watermark = enumSetting(KEY_WATERMARK, WatermarkStrength.MEDIUM),
         ),
@@ -146,6 +155,7 @@ class MobaApp(
         _appearance.value = appearance
         settings.set(KEY_STYLE, appearance.style.name)
         settings.set(KEY_FONT, appearance.font.name)
+        settings.set(KEY_ACCENT, appearance.accent.name)
         settings.set(KEY_TEXT_SIZE, appearance.textSize.name)
         settings.set(KEY_WATERMARK, appearance.watermark.name)
     }
@@ -302,8 +312,10 @@ class MobaApp(
         const val KEY_LICENSE = "license.key"
         const val KEY_STYLE = "ui.style"
         const val KEY_FONT = "ui.font"
+        const val KEY_ACCENT = "ui.accent"
         const val KEY_TEXT_SIZE = "ui.textSize"
         const val KEY_WATERMARK = "ui.watermark"
+        const val KEY_PREFERENCE = "pref."
         const val LOG_SIZE = 30
     }
 }
