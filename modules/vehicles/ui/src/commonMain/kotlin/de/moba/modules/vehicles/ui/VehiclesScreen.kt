@@ -70,6 +70,8 @@ import de.moba.modules.vehicles.api.DecoderProtocol
 import de.moba.modules.vehicles.api.Epoch
 import de.moba.modules.vehicles.api.Fleet
 import de.moba.modules.vehicles.api.LocoRecord
+import de.moba.core.model.LocoDynamics
+import androidx.compose.material3.Switch
 import de.moba.modules.vehicles.api.Traction
 import de.moba.modules.vehicles.api.VEHICLES_MODULE_ID
 import de.moba.modules.vehicles.api.VehicleGroup
@@ -382,6 +384,14 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
     var functions by remember {
         mutableStateOf(draft.record.functions.toSortedMap().entries.joinToString("\n") { "F${it.key} ${it.value}" })
     }
+    val dyn = draft.record.dynamics
+    var cab by remember { mutableStateOf(dyn.cab) }
+    var inertia by remember { mutableStateOf(dyn.inertia) }
+    var accel by remember { mutableStateOf(formatSeconds(dyn.accelerationSeconds)) }
+    var brake by remember { mutableStateOf(formatSeconds(dyn.brakingSeconds)) }
+    var period by remember { mutableStateOf(dyn.periodMs.toString()) }
+    var offset by remember { mutableStateOf(dyn.feedbackOffsetMm.toString()) }
+    var reaction by remember { mutableStateOf(dyn.reactionDelayMs.toString()) }
 
     FormHeader(if (draft.isNew) "Neue Lok" else r.name.ifBlank { "Lok" })
     PhotoSection(service, r.id)
@@ -417,11 +427,32 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
         minLines = 3,
         modifier = Modifier.fillMaxWidth(),
     )
+
+    // Fahreigenschaften: Fuehrerstand und Traegheit fuers Fahrpult, Offset und Reaktion fuers genaue Halten
+    Text("Fahreigenschaften", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+    SwitchRow("Führerstand", "Fahrpult mit km/h-Tacho, Fahrhebel, Betriebs- und Schnellbremse", cab) { cab = it }
+    SwitchRow("Trägheitssimulation", "Die Lok fährt langsam an und bremst langsam, wie ein schwerer Zug", inertia) { inertia = it }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        DecimalInput("Anfahrzeit (s)", accel, Modifier.weight(1f), enabled = inertia) { accel = it }
+        DecimalInput("Bremszeit (s)", brake, Modifier.weight(1f), enabled = inertia) { brake = it }
+        NumberInput("Zeitraum (ms)", period, Modifier.weight(1f), enabled = inertia) { period = it }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        NumberInput("Rückmelde-Offset (mm)", offset, Modifier.weight(1f)) { offset = it }
+        NumberInput("Reaktionsverzögerung (ms)", reaction, Modifier.weight(1f)) { reaction = it }
+    }
+    Text(
+        "Anfahr- und Bremszeit gelten von 0 bis zur Höchststufe; der Zeitraum ist der Abstand zwischen zwei Fahrstufen. " +
+            "Am Haltemelder fährt die Automatik noch den Rückmelde-Offset weiter und hält um die Reaktionsverzögerung früher.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     TextInput("Notiz", r.notes, singleLine = false) { r = r.copy(notes = it) }
 
     FormButtons(
         isNew = draft.isNew,
         onSave = {
+            val defaults = LocoDynamics()
             service.saveLoco(
                 r.copy(
                     name = r.name.trim(),
@@ -429,6 +460,15 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
                     vmax = vmax.toIntOrNull(),
                     lengthMm = length.toIntOrNull(),
                     functions = parseFunctions(functions),
+                    dynamics = LocoDynamics(
+                        cab = cab,
+                        inertia = inertia,
+                        accelerationSeconds = parseSeconds(accel) ?: defaults.accelerationSeconds,
+                        brakingSeconds = parseSeconds(brake) ?: defaults.brakingSeconds,
+                        periodMs = period.toIntOrNull() ?: defaults.periodMs,
+                        feedbackOffsetMm = offset.toIntOrNull() ?: 0,
+                        reactionDelayMs = reaction.toIntOrNull() ?: 0,
+                    ).validated(),
                 ),
             )
         },
@@ -545,16 +585,48 @@ private fun TextInput(
 }
 
 @Composable
-private fun NumberInput(label: String, value: String, modifier: Modifier, onChange: (String) -> Unit) {
+private fun NumberInput(label: String, value: String, modifier: Modifier, enabled: Boolean = true, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { onChange(it.filter(Char::isDigit).take(5)) },
         label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         singleLine = true,
+        enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = modifier,
     )
 }
+
+/** Sekunden mit Komma oder Punkt, z. B. "7,5". */
+@Composable
+private fun DecimalInput(label: String, value: String, modifier: Modifier, enabled: Boolean = true, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { text -> onChange(text.filter { it.isDigit() || it == ',' || it == '.' }.take(5)) },
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        singleLine = true,
+        enabled = enabled,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+internal fun parseSeconds(text: String): Double? = text.replace(',', '.').toDoubleOrNull()
+
+internal fun formatSeconds(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString().replace('.', ',')
 
 /** Auswahlfeld mit Menue; mit [optional] gibt es einen Eintrag "keine Angabe". */
 @Composable

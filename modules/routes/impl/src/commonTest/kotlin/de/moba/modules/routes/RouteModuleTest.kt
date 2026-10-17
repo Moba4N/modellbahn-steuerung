@@ -2,6 +2,9 @@ package de.moba.modules.routes
 
 import de.moba.adapters.simulator.SimulatorStation
 import de.moba.core.model.InMemoryLayoutRepository
+import de.moba.core.model.Layout
+import de.moba.core.model.Loco
+import de.moba.core.model.LocoDynamics
 import de.moba.core.runtime.LicenseInfo
 import de.moba.core.runtime.ModuleHost
 import de.moba.core.station.Direction
@@ -37,9 +40,13 @@ class RouteModuleTest {
     private val east = Route("fs-2", "Gleis 2 → Ost", listOf(RouteSetting(2, false), RouteSetting(3, true)), Feedback(1, 3), Feedback(1, 4))
     private val other = Route("fs-3", "Abstellgleis", listOf(RouteSetting(5, true)), null, Feedback(2, 1))
 
-    private suspend fun TestScope.start(license: LicenseInfo, store: MemoryStore = MemoryStore()): Pair<SimulatorStation, RouteService> {
+    private suspend fun TestScope.start(
+        license: LicenseInfo,
+        store: MemoryStore = MemoryStore(),
+        layout: InMemoryLayoutRepository = InMemoryLayoutRepository(),
+    ): Pair<SimulatorStation, RouteService> {
         val sim = SimulatorStation()
-        val host = ModuleHost(sim, InMemoryLayoutRepository(), license, backgroundScope)
+        val host = ModuleHost(sim, layout, license, backgroundScope)
         host.register(RouteModule(RouteRepository(store)))
         sim.connect()
         host.startAll()
@@ -205,5 +212,31 @@ class RouteModuleTest {
         service.startShuttle("pe-1")
         runCurrent()
         assertFailsWith<IllegalArgumentException> { service.startTrainRoute("zr-1") }
+    }
+
+    @Test
+    fun shuttleRunsOnByTheFeedbackOffsetMinusReactionDelay() = runTest {
+        // 126 km/h bei Fahrstufe 126 sind in H0 gut 402 mm/s: 100 mm dauern 249 ms, abzueglich 50 ms Reaktion
+        val layout = InMemoryLayoutRepository(
+            Layout(locos = listOf(Loco("l", "Lok", 3, dynamics = LocoDynamics(feedbackOffsetMm = 100, reactionDelayMs = 50), vmaxKmh = 126))),
+        )
+        val (sim, service) = start(LicenseInfo.of("pro"), layout = layout)
+        service.saveShuttle(Shuttle("pe-1", "Pendel", 3, speed = 126, endA = Feedback(1, 5), endB = Feedback(1, 6), waitSeconds = 5))
+        service.startShuttle("pe-1")
+        runCurrent()
+        assertEquals(126, sim.loco(3).speed)
+        hit(sim, Feedback(1, 6))
+        wait(150)
+        assertEquals(126, sim.loco(3).speed)
+        wait(100)
+        assertEquals(0, sim.loco(3).speed)
+        service.stopAutomation("pe-1")
+    }
+
+    @Test
+    fun stopTimingWithoutSpeedStopsAtOnce() {
+        assertEquals(0, StopTiming(LocoDynamics(feedbackOffsetMm = 100), null).delayMillis())
+        assertEquals(0, StopTiming(LocoDynamics(feedbackOffsetMm = 100, reactionDelayMs = 3000), 400.0).delayMillis())
+        assertEquals(250, StopTiming(LocoDynamics(feedbackOffsetMm = 100), 400.0).delayMillis())
     }
 }

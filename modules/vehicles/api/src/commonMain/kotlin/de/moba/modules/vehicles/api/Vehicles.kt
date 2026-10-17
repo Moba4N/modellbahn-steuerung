@@ -1,5 +1,6 @@
 package de.moba.modules.vehicles.api
 
+import de.moba.core.model.LocoDynamics
 import kotlinx.coroutines.flow.StateFlow
 
 const val VEHICLES_MODULE_ID = "moba.fahrzeuge"
@@ -55,6 +56,8 @@ data class LocoRecord(
     /** Funktionsnamen, z. B. 0 = "Licht". */
     val functions: Map<Int, String> = emptyMap(),
     val notes: String = "",
+    /** Fuehrerstand, Traegheitssimulation, Rueckmelde-Offset, Reaktionsverzoegerung und Zeitraum. */
+    val dynamics: LocoDynamics = LocoDynamics(),
 )
 
 /** Bauart einer Wagengattung; [code] ist der Kennbuchstabe nach UIC. */

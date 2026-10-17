@@ -112,11 +112,13 @@ object DrivingPanel : ModulePanel {
 private fun ThrottleFor(app: MobaApp, address: Int, service: DrivingService) {
     val states by service.locos.collectAsState()
     val layout by app.layout.layout.collectAsState()
+    val loco = layout.locos.firstOrNull { it.address == address }
     Throttle(
         app = app,
-        name = layout.locos.firstOrNull { it.address == address }?.name ?: "Lok $address",
+        name = loco?.name ?: "Lok $address",
         state = states[address] ?: LocoState(address),
         service = service,
+        loco = loco,
         // Schliessen nimmt die Lok nur aus dem Fahrpult; sie faehrt weiter, wie sie gerade faehrt.
         onClose = { DrivingUiState.selected.value = null },
     )

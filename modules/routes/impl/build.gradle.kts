@@ -12,6 +12,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":modules:routes:api"))
+            implementation(project(":modules:calibration:api"))
             implementation(project(":core:runtime"))
         }
         commonTest.dependencies {

@@ -9,6 +9,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runComposeUiTest
 import de.moba.adapters.catalog.StationCatalog
 import de.moba.core.model.Loco
+import de.moba.core.model.LocoDynamics
+import de.moba.core.station.Direction
+import de.moba.modules.driving.api.DrivingService
 import de.moba.core.runtime.LicenseInfo
 import de.moba.core.station.StationConfig
 import de.moba.modules.driving.DrivingModule
@@ -30,6 +33,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Fahrpult oeffnen und wieder schliessen, Funktionen bis F31, Monitor ueber das Burger-Menue. */
 @OptIn(ExperimentalTestApi::class)
@@ -52,6 +56,28 @@ class DrivingAndMonitorTest {
         ShellUiState.openTool.value = null
         ShellUiState.menuOpen.value = false
         FunctionKeysState.reset()
+    }
+
+    @Test
+    fun cabWithInertiaHasQuickBrake() = runComposeUiTest {
+        val app = app()
+        app.layout.update { l ->
+            l.copy(locos = listOf(Loco("br218", "BR 218", 3, dynamics = LocoDynamics(cab = true, inertia = true, accelerationSeconds = 120.0), vmaxKmh = 140)))
+        }
+        val sim = app.session.value!!.station as de.moba.adapters.simulator.SimulatorStation
+        val driving = app.session.value!!.host.service(DrivingService::class)!!
+        runBlocking {
+            sim.setLocoSpeed(3, 40, Direction.FORWARD)
+            driving.drive(3, 126, Direction.FORWARD)
+        }
+        DrivingUiState.selected.value = 3
+        setContent { MobaShell(app, listOf(DrivingScreen), listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId) }
+        waitForIdle()
+        onNodeWithText("Führerstand · Adresse 3").assertExists()
+        onNodeWithText("Ziel 140 km/h").assertExists()
+        onNodeWithText("Schnellbremse").performScrollTo().performClick()
+        waitUntil(timeoutMillis = 3_000) { sim.loco(3).speed == 0 }
+        assertTrue(driving.targets.value.isEmpty())
     }
 
     @Test

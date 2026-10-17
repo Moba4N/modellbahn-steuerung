@@ -60,7 +60,9 @@ class RouteModule(private val repository: RouteRepository) : MobaModule {
     private var service: RouteServiceImpl? = null
 
     override suspend fun start(ctx: ModuleContext) {
-        val impl = RouteServiceImpl(repository, ctx.station, ctx.license, ctx.scope)
+        val impl = RouteServiceImpl(repository, ctx.station, ctx.license, ctx.scope) { address, speed ->
+            stopTiming(ctx, address, speed)
+        }
         ctx.events.on<StationEvent.FeedbackChanged>(ctx.scope) { if (it.occupied) impl.onOccupied(Feedback(it.module, it.contact)) }
         ctx.provide<RouteService>(impl)
         service = impl
@@ -87,6 +89,8 @@ internal class RouteServiceImpl(
     private val station: CommandStation,
     license: LicenseInfo,
     private val scope: CoroutineScope,
+    /** Rueckmelde-Offset und Reaktionsverzoegerung der Lok bei dieser Fahrstufe; `null` = sofort halten. */
+    private val stopTiming: (address: Int, speed: Int) -> StopTiming? = { _, _ -> null },
 ) : RouteService {
     override val book: StateFlow<RouteBook> = repository.book
 
@@ -110,6 +114,14 @@ internal class RouteServiceImpl(
 
     private suspend fun waitFor(feedback: Feedback) {
         occupied.first { it == feedback }
+    }
+
+    /** Am Haltemelder halten: erst noch den Rueckmelde-Offset weiterfahren, abzueglich der Reaktionsverzoegerung. */
+    private suspend fun stopAt(feedback: Feedback, address: Int, speed: Int, direction: Direction) {
+        waitFor(feedback)
+        val wait = stopTiming(address, speed)?.delayMillis() ?: 0L
+        if (wait > 0) delay(wait)
+        station.setLocoSpeed(address, 0, direction)
     }
 
     // ------------------------------------------------------------ Bearbeiten
@@ -215,8 +227,7 @@ internal class RouteServiceImpl(
                     waitFor(brake)
                     station.setLocoSpeed(shuttle.locoAddress, shuttle.brakeSpeed, direction)
                 }
-                waitFor(target)
-                station.setLocoSpeed(shuttle.locoAddress, 0, direction)
+                stopAt(target, shuttle.locoAddress, if (brake != null) shuttle.brakeSpeed else shuttle.speed, direction)
                 status(id, "Wartet ${shuttle.waitSeconds} s an ${if (toB) "B" else "A"}")
                 delay(shuttle.waitSeconds * 1000L)
                 direction = if (toB) Direction.REVERSE else Direction.FORWARD
@@ -252,9 +263,9 @@ internal class RouteServiceImpl(
                     }
                     val stop = step.stopAt ?: route.end!!
                     status(id, "Abschnitt ${i + 1} von ${train.steps.size}: „${route.name}“ bis Melder $stop")
-                    station.setLocoSpeed(train.locoAddress, step.speed ?: train.speed, direction)
-                    waitFor(stop)
-                    station.setLocoSpeed(train.locoAddress, 0, direction)
+                    val speed = step.speed ?: train.speed
+                    station.setLocoSpeed(train.locoAddress, speed, direction)
+                    stopAt(stop, train.locoAddress, speed, direction)
                     releaseRoute(route.id)
                     held -= route.id
                     if (step.waitSeconds > 0) {

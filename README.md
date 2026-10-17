@@ -111,6 +111,17 @@ Jede Aenderung wird sofort in `fahrzeuge.txt` gespeichert (gleicher Ordner wie d
 Wer nach einem Abo-Wechsel mehr Eintraege hat als erlaubt, behaelt sie und kann sie bearbeiten,
 aber keine neuen anlegen.
 
+Fahreigenschaften je Lok (kostenlos, gespeichert als Zeile `fahr` in `fahrzeuge.txt`):
+
+- Fuehrerstand: das Fahrpult zeigt einen Tacho in km/h (bis Vmax), einen Fahrhebel, Bremsen und Schnellbremse
+- Traegheitssimulation: die App faehrt die Fahrstufe nach und nach hoch und runter. Anfahrzeit und Bremszeit
+  gelten von 0 bis zur Hoechststufe, der Zeitraum ist der Abstand zwischen zwei Fahrstufen (Standard 250 ms).
+  "Halt" bremst mit der Bremszeit, die Schnellbremse sofort. Ein Richtungswechsel bremst erst bis zum Stillstand.
+  Nothalt wirkt immer sofort.
+- Rueckmelde-Offset (mm): am Haltemelder faehrt die Automatik (Pendelstrecke, Zugroute) noch so weit, bevor sie haelt.
+  Die Zeit dafuer kommt aus dem Einmessen, sonst geschaetzt aus Vmax (H0).
+- Reaktionsverzoegerung (ms): so viel spaeter reagiert der Decoder; die Automatik schickt den Halt um so viel frueher.
+
 ## Decoder
 
 CVs lesen und schreiben ist kostenlos: auf dem Programmiergleis (lesen und schreiben) oder waehrend

@@ -76,7 +76,7 @@ class VehicleModule(private val repository: VehicleRepository) : MobaModule {
 
 /** Uebernimmt die angelegten Loks ins Anlagenmodell, damit das Fahrpult sie mit Namen zeigt. */
 internal fun syncLocos(layout: LayoutRepository, fleet: Fleet) = layout.update { current ->
-    val own = fleet.locos.map { Loco(it.id, it.name, it.address, it.functions) }
+    val own = fleet.locos.map { Loco(it.id, it.name, it.address, it.functions, it.dynamics, it.vmax) }
     current.copy(locos = current.locos.filterNot { it.id.startsWith(VehicleModule.ID_PREFIX) } + own)
 }
 

@@ -1,5 +1,7 @@
 package de.moba.modules.vehicles.api
 
+import de.moba.core.model.LocoDynamics
+
 /**
  * Textformat fuer gespeicherte Fahrzeuge, eine Zeile je Eintrag, Felder durch Tabulator getrennt:
  *
@@ -7,6 +9,7 @@ package de.moba.modules.vehicles.api
  * MOBA-FAHRZEUGE 1
  * lok    <id> <name> <adresse> <baureihe> <bahn> <epoche> <antrieb> <protokoll> <hersteller> <art.-nr.> <vmax> <laenge> <notiz>
  * fn     <lok-id> <nummer> <name>
+ * fahr   <lok-id> <fuehrerstand 0/1> <traegheit 0/1> <anfahren s> <bremsen s> <zeitraum ms> <offset mm> <reaktion ms>
  * wagen  <id> <gruppe> <gattung> <name> <bauart> <bahn> <epoche> <laenge> <anzahl> <hersteller> <art.-nr.> <notiz>
  * ```
  * Leere Felder stehen fuer "nicht gesetzt". Unbekannte Zeilen und Werte werden beim Lesen uebersprungen.
@@ -22,6 +25,13 @@ object VehicleCodec {
                 l.manufacturer, l.articleNumber, l.vmax, l.lengthMm, l.notes,
             )
             for ((n, label) in l.functions.toSortedMap()) line("fn", l.id, n, label)
+            val d = l.dynamics
+            if (d != LocoDynamics()) {
+                line(
+                    "fahr", l.id, if (d.cab) 1 else 0, if (d.inertia) 1 else 0, d.accelerationSeconds, d.brakingSeconds,
+                    d.periodMs, d.feedbackOffsetMm, d.reactionDelayMs,
+                )
+            }
         }
         for (w in fleet.wagons) {
             line(
@@ -64,6 +74,23 @@ object VehicleCodec {
                     "fn" -> {
                         val i = locos.indexOfFirst { it.id == at(1) }
                         if (i >= 0) locos[i] = locos[i].copy(functions = locos[i].functions + (at(2).toInt() to at(3)))
+                    }
+                    "fahr" -> {
+                        val i = locos.indexOfFirst { it.id == at(1) }
+                        val defaults = LocoDynamics()
+                        if (i >= 0) {
+                            locos[i] = locos[i].copy(
+                                dynamics = LocoDynamics(
+                                    cab = at(2) == "1",
+                                    inertia = at(3) == "1",
+                                    accelerationSeconds = at(4).toDoubleOrNull() ?: defaults.accelerationSeconds,
+                                    brakingSeconds = at(5).toDoubleOrNull() ?: defaults.brakingSeconds,
+                                    periodMs = at(6).toIntOrNull() ?: defaults.periodMs,
+                                    feedbackOffsetMm = at(7).toIntOrNull() ?: 0,
+                                    reactionDelayMs = at(8).toIntOrNull() ?: 0,
+                                ).validated(),
+                            )
+                        }
                     }
                     "wagen" -> wagons += WagonClass(
                         id = at(1),

@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.Density
 import de.moba.adapters.catalog.StationCatalog
 import de.moba.adapters.simulator.SimulatorStation
 import de.moba.core.model.Loco
+import de.moba.core.model.LocoDynamics
 import de.moba.core.runtime.EcLicenseVerifier
 import de.moba.core.runtime.License
 import de.moba.core.runtime.LicenseInfo
@@ -632,6 +633,37 @@ class ScreenshotTest {
         pro.setAppearance(Appearance())
         FunctionKeysState.set(pro, FunctionRange.F12)
         FunctionKeysState.reset()
+        DrivingUiState.selected.value = null
+
+        // Fahreigenschaften der Lok und Fuehrerstand mit Traegheit (die Lok faehrt noch hoch, die Marke zeigt den Fahrhebel)
+        app.setDarkTheme(true)
+        val heavy = LocoDynamics(cab = true, inertia = true, accelerationSeconds = 120.0, brakingSeconds = 60.0, periodMs = 250, feedbackOffsetMm = 60, reactionDelayMs = 120)
+        VehiclesUiState.group.value = VehicleGroup.LOCOS
+        VehiclesUiState.draft.value = VehicleDraft.Loco(freeVehicles.fleet.value.locos.first().copy(dynamics = heavy), isNew = false)
+        render("pc-fahrzeuge-lok-fahreigenschaften-dunkel", 1440, 1700, 1f) {
+            MobaShell(app, listOf(DrivingScreen, VehiclesScreen), listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+        }
+        app.setDarkTheme(false)
+        render("handy-fahrzeuge-lok-fahreigenschaften-hell", 824, 3400, 2f) {
+            MobaShell(app, listOf(DrivingScreen, VehiclesScreen), listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId)
+        }
+        VehiclesUiState.draft.value = null
+        pro.layout.update { l -> l.copy(locos = l.locos.map { if (it.address == 12) it.copy(dynamics = heavy, vmaxKmh = 300) else it }) }
+        proSim.setLocoSpeed(12, 48, Direction.FORWARD)
+        delay(100)
+        proDriving.drive(12, 110, Direction.FORWARD)
+        DrivingUiState.selected.value = 12
+        pro.setPreference("shell.fahrpult", "an")
+        pro.setDarkTheme(true)
+        render("pc-fuehrerstand-traegheit-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        pro.setDarkTheme(false)
+        render("handy-fuehrerstand-traegheit-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = DrivingScreen.moduleId)
+        }
+        proDriving.emergencyBrake(12)
+        pro.layout.update { l -> l.copy(locos = l.locos.map { if (it.address == 12) it.copy(dynamics = LocoDynamics(), vmaxKmh = null) else it }) }
         DrivingUiState.selected.value = null
 
         // Gleisbilder in eigenen Fenstern (Pro)
