@@ -84,6 +84,8 @@ import de.moba.ui.shell.LocalWideLayout
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.ModuleScreen
+import de.moba.ui.shell.PrintItem
+import de.moba.ui.shell.PrintTable
 import de.moba.ui.shell.StatusPill
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -112,6 +114,34 @@ object VehiclesScreen : ModuleScreen {
     override val title = "Fahrzeuge"
     override val icon = Icons.Outlined.DirectionsRailway
 
+    override fun printables(app: MobaApp): List<PrintItem> {
+        val service = app.session.value?.host?.service(VehicleService::class) ?: return emptyList()
+        val fleet = service.fleet.value
+        val items = mutableListOf<PrintItem>()
+        if (fleet.locos.isNotEmpty()) {
+            items += PrintItem("Lokliste") {
+                PrintTable(
+                    "Lokliste",
+                    listOf("Name", "Adresse", "Baureihe", "Bahn", "Vmax", "Hersteller", "Art.-Nr."),
+                    fleet.locos.sortedBy { it.address }.map { l ->
+                        listOf(l.name, l.address.toString(), l.series, l.railway, l.vmax?.let { "$it km/h" }.orEmpty(), l.manufacturer, l.articleNumber)
+                    },
+                )
+            }
+        }
+        if (fleet.wagons.isNotEmpty()) {
+            items += PrintItem("Wagenliste") {
+                PrintTable(
+                    "Wagenliste",
+                    listOf("Gattung", "Name", "Bahn", "Anzahl", "Länge", "Hersteller", "Art.-Nr."),
+                    fleet.wagons.sortedBy { it.code }.map { w ->
+                        listOf(w.code, w.name, w.railway, w.count.toString(), w.lengthMm?.let { "$it mm" }.orEmpty(), w.manufacturer, w.articleNumber)
+                    },
+                )
+            }
+        }
+        return items
+    }
 
     @Composable
     override fun Content(app: MobaApp) {

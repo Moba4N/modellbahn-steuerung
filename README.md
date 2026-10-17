@@ -310,6 +310,23 @@ Dort lassen sich kostenlos einstellen:
 - eigenes Hintergrundbild als Wasserzeichen in drei Staerken. Das Bild wird als Kopie
   `hintergrund.bild` im Datenordner gespeichert.
 
+## Datei-Menue
+
+Das zweite Burger-Menue links oben ("Datei") arbeitet wie das Datei-Menue in iTrain:
+
+- **Anlagen**: Jede Anlage ist ein eigener Ordner mit Gleisbildern, Fahrzeugen, Fahrstrassen, Symbolen, Decodern,
+  Einmessungen und Klaengen. Der bisherige Datenordner ist die Standard-Anlage "Meine Anlage"; neue Anlagen liegen
+  unter `anlagen/` (auf Wunsch als Kopie der offenen). Unter Windows laesst sich jeder Ordner als Anlage oeffnen.
+- **Zuletzt verwendet**: die letzten sechs Anlagen direkt im Menue. Vor dem Wechsel fragt die App nach ungespeicherten Aenderungen.
+- **Sicherung**: ZIP aller Daten in `sicherungen/`, automatisch einmal am Tag beim Start (die letzten 10 bleiben),
+  wiederherstellen, loeschen oder an anderer Stelle speichern. Vor Wiederherstellen und Import sichert die App den alten Stand.
+- **Export und Import**: gewaehlte Teile als ZIP speichern und in eine andere Anlage oder auf ein anderes Geraet
+  uebernehmen; die gewaehlten Teile ersetzen die vorhandenen.
+- **Ressourcen-Browser**: alle Dateien der Anlage mit Groesse und Datum, nach Daten, Bildern und Klaengen gefiltert;
+  Bilder ansehen, Klaenge abspielen, Dateien speichern oder loeschen.
+- **Drucken**: jedes Gleisbild sowie Lok- und Wagenliste mit Vorschau; Windows ueber den Druckerdialog
+  (auch "Microsoft Print to PDF"), Android ueber den Druckdienst des Systems.
+
 ## Monitor
 
 Zusatzmodul, kostenlos, nur ueber das Burger-Menue unter "Werkzeuge" erreichbar. Zeigt live, was die App an die

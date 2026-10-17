@@ -131,6 +131,9 @@ class MobaApp(
         restartModules()
     }
 
+    /** Startet alle Module neu, z. B. nachdem eine andere Anlage geoeffnet oder eine Sicherung zurueckgespielt wurde. */
+    fun reloadModules() = restartModules()
+
     private fun restartModules() {
         _session.value?.config?.let { connect(it) }
     }

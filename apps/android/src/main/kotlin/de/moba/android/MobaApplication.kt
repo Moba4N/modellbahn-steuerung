@@ -28,6 +28,8 @@ import de.moba.modules.routes.RouteRepository
 import de.moba.modules.throttles.FileThrottleBarStore
 import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
+import de.moba.core.files.FolderLayoutFiles
+import de.moba.ui.shell.FileSupport
 import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.SettingsStore
@@ -38,20 +40,45 @@ import java.io.File
 
 /** Haelt die Verbindung zur Zentrale ueber Bildschirmdrehungen hinweg. */
 class MobaApplication : Application() {
+    private val prefs by lazy { getSharedPreferences("moba", Context.MODE_PRIVATE) }
+
+    /** App-Speicher als Standard-Anlage, weitere Anlagen unter "anlagen" (Datei-Menue). */
+    val layoutFiles by lazy {
+        FolderLayoutFiles(filesDir, { prefs.getString(it, null) }, { k, v -> prefs.edit().putString(k, v).apply() })
+    }
+
+    /** Die Daten der offenen Anlage; bleiben ueber Neustarts der Module erhalten. */
+    private class LayoutData(dir: File) {
+        val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dir, "gleisbilder.txt")))
+        val vehicles = VehicleRepository(FileVehicleStore(File(dir, "fahrzeuge.txt")))
+        val symbols = SymbolRepository(FileSymbolStore(File(dir, "symbole.txt")))
+        val decoders = DecoderRepository(FileDecoderStore(File(dir, "decoder.txt")))
+        val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dir, "fahrregler.txt")))
+        val calibration = CalibrationRepository(FileCalibrationStore(File(dir, "einmessen.txt")))
+        val routes = RouteRepository(FileRouteStore(File(dir, "fahrstrassen.txt")))
+    }
+
+    private var data: LayoutData? = null
+
+    /** Laedt die Daten der jetzt offenen Anlage und startet die Module neu. */
+    val files by lazy {
+        FileSupport(layoutFiles) {
+            data = LayoutData(layoutFiles.dir)
+            app.reloadModules()
+        }
+    }
+
     val app: MobaApp by lazy {
-        val prefs = getSharedPreferences("moba", Context.MODE_PRIVATE)
-        val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(filesDir, "gleisbilder.txt")))
-        val vehicles = VehicleRepository(FileVehicleStore(File(filesDir, "fahrzeuge.txt")))
-        val symbols = SymbolRepository(FileSymbolStore(File(filesDir, "symbole.txt")))
-        val decoders = DecoderRepository(FileDecoderStore(File(filesDir, "decoder.txt")))
-        val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(filesDir, "fahrregler.txt")))
-        val calibration = CalibrationRepository(FileCalibrationStore(File(filesDir, "einmessen.txt")))
-        val routes = RouteRepository(FileRouteStore(File(filesDir, "fahrstrassen.txt")))
+        data = LayoutData(layoutFiles.dir)
+        runCatching { layoutFiles.autoBackup() }
         MobaApp(
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
             drivers = StationCatalog.drivers,
             discovery = StationCatalog.discovery,
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes), MonitorModule()) },
+            moduleFactory = {
+                val d = data ?: LayoutData(layoutFiles.dir).also { data = it }
+                listOf(DrivingModule(), TrackPlanModule(d.trackPlans), VehicleModule(d.vehicles), DecoderModule(d.decoders), SymbolModule(d.symbols), ThrottleBarModule(d.throttleBar), CalibrationModule(d.calibration), RouteModule(d.routes), MonitorModule())
+            },
             settings = object : SettingsStore {
                 override fun get(key: String): String? = prefs.getString(key, null)
                 override fun set(key: String, value: String) = prefs.edit().putString(key, value).apply()

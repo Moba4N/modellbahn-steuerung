@@ -20,11 +20,16 @@ kotlin {
         val desktopMain by getting { resources.srcDir("fonts") }
         commonMain.dependencies {
             api(project(":core:runtime"))
+            api(project(":core:files"))
             implementation(libs.kotlinx.datetime)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
+        }
+        // Dateiauswahl zum Speichern und Oeffnen (Import, Export, Sicherungen)
+        androidMain.dependencies {
+            implementation(libs.androidx.activity.compose)
         }
     }
 }

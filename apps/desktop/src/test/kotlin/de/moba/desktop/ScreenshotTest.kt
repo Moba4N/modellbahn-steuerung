@@ -109,6 +109,10 @@ import de.moba.ui.shell.DesignStyle
 import de.moba.ui.shell.FontChoice
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
+import de.moba.ui.shell.FileDialogKind
+import de.moba.ui.shell.FileSupport
+import de.moba.ui.shell.FileUiState
+import de.moba.core.files.FolderLayoutFiles
 import de.moba.ui.shell.ModuleWindowFrame
 import de.moba.ui.shell.ShellUiState
 import de.moba.ui.shell.SoundSupport
@@ -931,6 +935,51 @@ class ScreenshotTest {
         proPlansService.toggleVisible(visibleBefore.first())
         proPlansService.toggleVisible(measurePlan.id)
         proPlansService.removePlan(measurePlan.id)
+
+        // Datei-Menue wie in iTrain: Anlagen, Sicherung, Import/Export, Ressourcen-Browser, Drucken
+        val fileRoot = java.nio.file.Files.createTempDirectory("moba-anlage").toFile()
+        val fileSettings = mutableMapOf<String, String>()
+        val layoutFiles = FolderLayoutFiles(fileRoot, { fileSettings[it] }, { k, v -> fileSettings[k] = v })
+        File(fileRoot, "gleisbilder.txt").writeText("x".repeat(18_000))
+        File(fileRoot, "fahrzeuge.txt").writeText("x".repeat(4_200))
+        File(fileRoot, "fahrstrassen.txt").writeText("x".repeat(2_100))
+        File(fileRoot, "fahrzeugbilder").mkdirs()
+        File(fileRoot, "fahrzeugbilder/br218.bild").writeBytes(demoLocoPhoto())
+        File(fileRoot, "klaenge").mkdirs()
+        File(fileRoot, "klaenge/pfiff.wav").writeBytes(ByteArray(48_000))
+        layoutFiles.backup("automatisch")
+        layoutFiles.create("Clubanlage Nord")
+        layoutFiles.open(fileRoot.path)
+        layoutFiles.backup()
+        val fileSupport = FileSupport(layoutFiles) {}
+        pro.setDarkTheme(true)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        FileUiState.menuOpen.value = true
+        render("pc-datei-menue-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport)
+        }
+        FileUiState.menuOpen.value = false
+        for ((kind, name) in listOf(
+            FileDialogKind.OPEN to "anlage-oeffnen", FileDialogKind.BACKUP to "sicherung", FileDialogKind.EXPORT to "export",
+            FileDialogKind.IMPORT to "import", FileDialogKind.RESOURCES to "ressourcen", FileDialogKind.PRINT to "drucken",
+        )) {
+            FileUiState.dialog.value = kind
+            render("pc-datei-$name-dunkel", 1440, 900, 1f) {
+                MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport)
+            }
+        }
+        pro.setDarkTheme(false)
+        FileUiState.dialog.value = FileDialogKind.RESOURCES
+        render("handy-datei-ressourcen-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport)
+        }
+        FileUiState.dialog.value = null
+        FileUiState.menuOpen.value = true
+        render("handy-datei-menue-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport)
+        }
+        FileUiState.menuOpen.value = false
+        fileRoot.deleteRecursively()
 
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)

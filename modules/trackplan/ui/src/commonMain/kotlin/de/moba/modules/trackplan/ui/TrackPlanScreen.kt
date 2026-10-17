@@ -99,6 +99,8 @@ import de.moba.ui.shell.LocalWideLayout
 import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.ModuleScreen
+import de.moba.ui.shell.PrintItem
+import de.moba.ui.shell.PrintPage
 import de.moba.ui.shell.ShellUiState
 import de.moba.ui.shell.StatusPill
 import de.moba.ui.shell.UnsavedWork
@@ -172,6 +174,13 @@ object TrackPlanScreen : ModuleScreen {
         val service = app.session.value?.host?.service(TrackPlanService::class) ?: return null
         if (!service.unsaved.value) return null
         return UnsavedWork("Gleisbilder", service.canSave) { service.save() }
+    }
+
+    override fun printables(app: MobaApp): List<PrintItem> {
+        val service = app.session.value?.host?.service(TrackPlanService::class) ?: return emptyList()
+        return service.plans.value.map { plan ->
+            PrintItem("Gleisbild „${plan.name}“") { PrintedPlan(app, plan) }
+        }
     }
 
 
@@ -1101,3 +1110,16 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
         }
     }
 }
+
+/** Gleisbild zum Drucken: wie im Editor, ohne Raster, mit Namen und Groesse als Ueberschrift. */
+@Composable
+private fun PrintedPlan(app: MobaApp, plan: TrackPlan) {
+    val library = app.session.value?.host?.service(SymbolService::class)?.symbols?.collectAsState()?.value.orEmpty()
+    CompositionLocalProvider(LocalSymbolLibrary provides library) {
+        PrintPage(plan.name, "${plan.width} × ${plan.height} Felder") {
+            TrackPlanView(plan, PRINT_CELL.dp, TrackState(symbolImage = { symbolImage(it, emptyMap(), emptyMap(), library) }))
+        }
+    }
+}
+
+private const val PRINT_CELL = 28

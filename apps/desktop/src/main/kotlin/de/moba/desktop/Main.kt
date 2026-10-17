@@ -48,6 +48,8 @@ import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
 import de.moba.modules.throttles.ui.ThrottleDock
 import de.moba.ui.shell.ExitGuard
+import de.moba.ui.shell.FileSupport
+import de.moba.core.files.FolderLayoutFiles
 import de.moba.ui.shell.ImagePicker
 import de.moba.ui.shell.ImageStore
 import de.moba.ui.shell.MobaApp
@@ -70,15 +72,25 @@ private object DesktopSettings : SettingsStore {
     override fun set(key: String, value: String) = prefs.put(key, value)
 }
 
-/** Gleisbilder und Fahrzeuge liegen im Benutzerordner, z. B. C:\Users\<Name>\.modellbahn-steuerung. */
+/**
+ * App-Ordner im Benutzerordner, z. B. C:\Users\<Name>\.modellbahn-steuerung. Er ist zugleich die Standard-Anlage;
+ * weitere Anlagen liegen unter "anlagen" oder in einem frei gewaehlten Ordner (Datei-Menue).
+ */
 private val dataDir = File(System.getProperty("user.home"), ".modellbahn-steuerung")
-private val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dataDir, "gleisbilder.txt")))
-private val vehicles = VehicleRepository(FileVehicleStore(File(dataDir, "fahrzeuge.txt")))
-private val symbols = SymbolRepository(FileSymbolStore(File(dataDir, "symbole.txt")))
-private val decoders = DecoderRepository(FileDecoderStore(File(dataDir, "decoder.txt")))
-private val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dataDir, "fahrregler.txt")))
-private val calibration = CalibrationRepository(FileCalibrationStore(File(dataDir, "einmessen.txt")))
-private val routes = RouteRepository(FileRouteStore(File(dataDir, "fahrstrassen.txt")))
+private val layoutFiles = FolderLayoutFiles(dataDir, DesktopSettings::get, DesktopSettings::set)
+
+/** Die Daten der offenen Anlage; bleiben ueber Neustarts der Module (z. B. Zentralenwechsel) erhalten. */
+private class LayoutData(dir: File) {
+    val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dir, "gleisbilder.txt")))
+    val vehicles = VehicleRepository(FileVehicleStore(File(dir, "fahrzeuge.txt")))
+    val symbols = SymbolRepository(FileSymbolStore(File(dir, "symbole.txt")))
+    val decoders = DecoderRepository(FileDecoderStore(File(dir, "decoder.txt")))
+    val throttleBar = ThrottleBarRepository(FileThrottleBarStore(File(dir, "fahrregler.txt")))
+    val calibration = CalibrationRepository(FileCalibrationStore(File(dir, "einmessen.txt")))
+    val routes = RouteRepository(FileRouteStore(File(dir, "fahrstrassen.txt")))
+}
+
+private var data = LayoutData(layoutFiles.dir)
 
 /** Hintergrundbild als Kopie im Datenordner, damit es auch nach Verschieben des Originals bleibt. */
 private object DesktopImageStore : ImageStore {
@@ -107,7 +119,7 @@ private fun imagePicker(window: java.awt.Frame) = ImagePicker { onResult ->
 
 /** Klaenge fuer Sound-Zubehoer: Dateidialog, Kopie in "klaenge" im Datenordner, Wiedergabe mit Java Sound. */
 private class DesktopSound(private val window: java.awt.Frame) : SoundSupport {
-    private val dir = File(dataDir, "klaenge")
+    private val dir get() = File(layoutFiles.dir, "klaenge")
     override val formats = "WAV, AIFF oder AU."
 
     override fun pick(onResult: (String?) -> Unit) {
@@ -152,11 +164,24 @@ fun main() = application {
             scope = scope,
             drivers = StationCatalog.drivers,
             discovery = StationCatalog.discovery,
-            moduleFactory = { listOf(DrivingModule(), TrackPlanModule(trackPlans), VehicleModule(vehicles), DecoderModule(decoders), SymbolModule(symbols), ThrottleBarModule(throttleBar), CalibrationModule(calibration), RouteModule(routes), MonitorModule()) },
+            moduleFactory = {
+                val d = data
+                listOf(DrivingModule(), TrackPlanModule(d.trackPlans), VehicleModule(d.vehicles), DecoderModule(d.decoders), SymbolModule(d.symbols), ThrottleBarModule(d.throttleBar), CalibrationModule(d.calibration), RouteModule(d.routes), MonitorModule())
+            },
             settings = DesktopSettings,
             imageStore = DesktopImageStore,
             licenseVerifier = EcLicenseVerifier(ManufacturerKey.PUBLIC),
-        ).also { it.start() }
+        ).also {
+            // Einmal am Tag beim Start automatisch sichern
+            runCatching { layoutFiles.autoBackup() }
+            it.start()
+        }
+    }
+    val files = remember {
+        FileSupport(layoutFiles) {
+            data = LayoutData(layoutFiles.dir)
+            app.reloadModules()
+        }
     }
     Window(
         onCloseRequest = exitGuard::request,
@@ -178,6 +203,7 @@ fun main() = application {
             separateWindows = true,
             sound = sound,
             effects = listOf(TrackPlanSounds, TrackPlanTrains),
+            files = files,
         )
     }
     // Gleisbilder in eigenen Fenstern (Pro), z. B. auf einem zweiten und dritten Bildschirm

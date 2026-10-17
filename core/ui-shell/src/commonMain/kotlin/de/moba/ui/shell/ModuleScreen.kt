@@ -15,7 +15,15 @@ interface ModuleScreen {
     /** Aenderungen dieses Reiters, die beim Beenden verloren gingen; `null` = alles gespeichert. */
     fun unsavedWork(app: MobaApp): UnsavedWork? = null
 
+    /** Was sich aus diesem Reiter drucken laesst (Datei-Menue, „Drucken …“), z. B. jedes Gleisbild. */
+    fun printables(app: MobaApp): List<PrintItem> = emptyList()
 }
+
+/**
+ * Eine druckbare Seite: [content] wird hell und in voller Groesse gezeichnet, als Bild aufgenommen
+ * und auf eine Seite eingepasst gedruckt.
+ */
+class PrintItem(val title: String, val content: @Composable () -> Unit)
 
 /** Ungespeicherte Aenderungen, nach denen die App vor dem Beenden fragt. */
 class UnsavedWork(

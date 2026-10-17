@@ -20,6 +20,7 @@ include(
     ":core:model",
     ":core:station-api",
     ":core:runtime",
+    ":core:files",
     ":adapters:simulator",
     ":adapters:net",
     ":adapters:z21",

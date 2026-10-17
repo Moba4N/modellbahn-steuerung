@@ -55,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material.icons.outlined.Speed
 import kotlinx.coroutines.flow.drop
@@ -131,6 +132,8 @@ fun MobaShell(
     sound: SoundSupport? = null,
     /** Unsichtbare Begleiter der Module, siehe [ModuleEffect]. */
     effects: List<ModuleEffect> = emptyList(),
+    /** Anlagen-Dateien fuer das Datei-Menue (zweites Burger-Menue links); `null` = kein Datei-Menue. */
+    files: FileSupport? = null,
 ) {
     SideEffect { ShellUiState.separateWindows.value = separateWindows }
     val dark by app.darkTheme.collectAsState()
@@ -154,6 +157,10 @@ fun MobaShell(
     }
     val panelOpen by ShellUiState.panelOpen.collectAsState()
     var current by remember { mutableStateOf(initialScreen ?: OVERVIEW) }
+    // Immer die gerade sichtbaren Reiter fragen: ungespeichert und druckbar
+    val unsaved = { visible.mapNotNull { it.unsavedWork(app) } }
+    val latestUnsaved by rememberUpdatedState(unsaved)
+    val fileGuard = remember { FileGuard { latestUnsaved() } }
     if (current != OVERVIEW && visible.none { it.moduleId == current }) current = OVERVIEW
 
     MobaTheme(dark, appearance) {
@@ -171,6 +178,8 @@ fun MobaShell(
                 Column(Modifier.fillMaxSize()) {
                     TopBar(
                         app,
+                        files = files,
+                        fileMenu = { support -> FileMenu(support, compact = !wide, unsaved = unsaved, run = fileGuard::run) },
                         compact = !wide,
                         panelToggle = wide && activePanels.isNotEmpty(),
                         destinations = listOf(Destination(OVERVIEW, "Übersicht", Icons.Outlined.Dashboard)) +
@@ -267,6 +276,9 @@ fun MobaShell(
             activeTools.firstOrNull { it.moduleId == openTool }?.let { tool ->
                 ToolWindow(app, tool) { ShellUiState.openTool.value = null }
             }
+            if (files != null) {
+                FileDialogs(files, unsaved, { visible.flatMap { it.printables(app) } }, fileGuard)
+            }
             if (exitGuard != null && exitGuard.asking) {
                 ExitDialog(visible.mapNotNull { it.unsavedWork(app) }, exitGuard, onExit)
             }
@@ -293,6 +305,8 @@ private fun ToolWindow(app: MobaApp, tool: ModuleTool, onClose: () -> Unit) {
 @Composable
 private fun TopBar(
     app: MobaApp,
+    files: FileSupport?,
+    fileMenu: @Composable (FileSupport) -> Unit,
     compact: Boolean,
     panelToggle: Boolean,
     destinations: List<Destination>,
@@ -312,9 +326,15 @@ private fun TopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Datei-Menue ganz links wie in Desktop-Programmen
+            files?.let { fileMenu(it) }
             Icon(Icons.Filled.Train, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
             if (!compact) {
                 Text("Modellbahn-Steuerung", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                files?.let { support ->
+                    val layout by support.files.current.collectAsState()
+                    Text(layout.name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
                 Spacer(Modifier.width(8.dp))
             }
 

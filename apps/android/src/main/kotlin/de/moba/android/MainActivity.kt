@@ -35,7 +35,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Im Fahrbetrieb bleibt der Bildschirm an.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val app = (application as MobaApplication).app
+        val moba = application as MobaApplication
+        val app = moba.app
         setContent {
             // Bildauswahl aus Galerie oder Dateien; das Ergebnis geht an den wartenden Aufrufer.
             val pending = remember { arrayOfNulls<(ByteArray?) -> Unit>(1) }
@@ -83,11 +84,13 @@ class MainActivity : ComponentActivity() {
                 onExit = ::finish,
                 sound = sound,
                 effects = listOf(TrackPlanSounds, TrackPlanTrains),
+                files = moba.files,
             )
         }
     }
 
-    private val soundDir get() = File(filesDir, "klaenge")
+    /** Klaenge gehoeren zur offenen Anlage. */
+    private val soundDir get() = File((application as MobaApplication).layoutFiles.dir, "klaenge")
 
     private fun storeSound(uri: Uri): String? {
         val display = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
