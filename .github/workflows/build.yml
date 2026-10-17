@@ -20,6 +20,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Bauen und testen (Kern, Simulator, Android, Desktop)
         run: ./gradlew build
+      - name: Testergebnisse bei Fehlern hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testergebnisse
+          path: '**/build/test-results/**/*.xml'
       - name: Android-App (APK zum Installieren, mit Debug-Schluessel signiert)
         uses: actions/upload-artifact@v4
         with:
