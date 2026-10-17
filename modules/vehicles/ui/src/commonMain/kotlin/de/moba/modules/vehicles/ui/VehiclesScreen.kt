@@ -435,12 +435,12 @@ private fun LocoForm(service: VehicleService, draft: VehicleDraft.Loco) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         DecimalInput("Anfahrzeit (s)", accel, Modifier.weight(1f), enabled = inertia) { accel = it }
         DecimalInput("Bremszeit (s)", brake, Modifier.weight(1f), enabled = inertia) { brake = it }
-        NumberInput("Zeitraum (ms)", period, Modifier.weight(1f), enabled = inertia) { period = it }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        NumberInput("Zeitraum (ms)", period, Modifier.weight(1f), enabled = inertia) { period = it }
         NumberInput("Rückmelde-Offset (mm)", offset, Modifier.weight(1f)) { offset = it }
-        NumberInput("Reaktionsverzögerung (ms)", reaction, Modifier.weight(1f)) { reaction = it }
     }
+    NumberInput("Reaktionsverzögerung (ms)", reaction, Modifier.fillMaxWidth()) { reaction = it }
     Text(
         "Anfahr- und Bremszeit gelten von 0 bis zur Höchststufe; der Zeitraum ist der Abstand zwischen zwei Fahrstufen. " +
             "Am Haltemelder fährt die Automatik noch den Rückmelde-Offset weiter und hält um die Reaktionsverzögerung früher.",

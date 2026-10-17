@@ -167,7 +167,7 @@ internal fun Throttle(app: MobaApp, name: String, state: LocoState, service: Dri
             ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Rückwärts") }
             Button(
                 onClick = { run { service.stop(address) } },
-                modifier = Modifier.height(56.dp).width(132.dp),
+                modifier = Modifier.height(56.dp).width(if (cab || dynamics.inertia) 156.dp else 132.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -175,7 +175,7 @@ internal fun Throttle(app: MobaApp, name: String, state: LocoState, service: Dri
             ) {
                 Icon(Icons.Filled.Stop, null)
                 Spacer(Modifier.width(6.dp))
-                Text(if (cab || dynamics.inertia) "Bremsen" else "Halt", fontWeight = FontWeight.SemiBold)
+                Text(if (cab || dynamics.inertia) "Bremsen" else "Halt", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
             }
             FilledIconToggleButton(
                 checked = state.direction == Direction.FORWARD,
