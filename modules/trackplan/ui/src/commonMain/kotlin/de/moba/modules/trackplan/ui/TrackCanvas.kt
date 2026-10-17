@@ -28,7 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.Branch
+import de.moba.modules.trackplan.api.Footprint
+import de.moba.modules.trackplan.api.TableConfig
+import de.moba.modules.trackplan.api.aspectNames
+import de.moba.modules.trackplan.api.isOn
 import de.moba.modules.trackplan.api.Cell
 import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackDir
@@ -40,6 +45,8 @@ import de.moba.modules.symbols.ui.drawPixels
 import de.moba.ui.shell.Moba
 import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Farben des Gleisbilds, abgeleitet vom App-Thema. */
@@ -85,6 +92,12 @@ internal class TrackState(
     val operating: Boolean = false,
     /** Bild fuer Signal- und Symbolkacheln mit gewaehltem Symbol, sonst null. */
     val symbolImage: (TrackTile) -> PixelImage? = { null },
+    /** Aktuelles Bild je Grundadresse (Signale und Zubehoer mit Bildern). */
+    val aspects: Map<Int, Int> = emptyMap(),
+    /** Position der Buehne je Grundadresse von Drehscheiben und Schiebebuehnen. */
+    val tablePositions: Map<Int, Int> = emptyMap(),
+    /** Buehnen, die gerade drehen bzw. fahren. */
+    val moving: Set<Int> = emptySet(),
 )
 
 /**
@@ -122,12 +135,14 @@ internal fun TrackPlanView(
                 drawCircle(colors.grid, r, Offset(gx * cellPx, gy * cellPx))
             }
         }
-        for (tile in plan.tiles) drawTile(tile, tile.x * cellPx, tile.y * cellPx, cellPx, colors, state, measurer)
+        // Drehscheiben und Schiebebuehnen zuerst, die anschliessenden Gleise liegen darueber
+        for (tile in plan.tiles.sortedByDescending { it.shape.isTable }) drawTile(tile, tile.x * cellPx, tile.y * cellPx, cellPx, colors, state, measurer)
         selected?.let { (sx, sy) ->
+            val area = plan.tileAt(sx, sy)?.footprint() ?: Footprint(sx, sy, 1, 1)
             drawRoundRect(
                 colors.selection,
-                topLeft = Offset(sx * cellPx + 1f, sy * cellPx + 1f),
-                size = Size(cellPx - 2f, cellPx - 2f),
+                topLeft = Offset(area.x * cellPx + 1f, area.y * cellPx + 1f),
+                size = Size(area.width * cellPx - 2f, area.height * cellPx - 2f),
                 cornerRadius = CornerRadius(cellPx * 0.15f),
                 style = Stroke(width = (cellPx * 0.07f).coerceAtLeast(2f)),
             )
@@ -141,7 +156,17 @@ internal fun ShapePreview(tile: TrackTile, size: Dp, state: TrackState = TrackSt
     val colors = trackColors()
     val measurer = rememberTextMeasurer()
     Canvas(Modifier.size(size)) {
-        drawTile(tile.copy(x = 0, y = 0), 0f, 0f, this.size.width, colors, state, measurer)
+        if (tile.shape.isTable) {
+            // Drehscheibe und Schiebebuehne verkleinert auf 3 x 3 Felder
+            val small = tile.copy(x = 0, y = 0)
+                .withProp(AccessoryProps.SIZE, if (tile.shape.kind == TileKind.TURNTABLE) "1" else "3")
+                .withProp(AccessoryProps.POSITIONS, if (tile.shape.kind == TileKind.TURNTABLE) tile.prop(AccessoryProps.POSITIONS).ifEmpty { "24" } else "3")
+            val area = small.footprint()
+            val cell = this.size.width / maxOf(area.width, area.height)
+            drawTile(small, -area.x * cell, -area.y * cell, cell, colors, state, measurer)
+        } else {
+            drawTile(tile.copy(x = 0, y = 0), 0f, 0f, this.size.width, colors, state, measurer)
+        }
     }
 }
 
@@ -190,12 +215,26 @@ internal fun DrawScope.drawTile(
         return
     }
 
+    when (kind) {
+        TileKind.TURNTABLE -> return drawTurntable(tile, left, top, cell, colors, state)
+        TileKind.TRANSFER -> return drawTransferTable(tile, left, top, cell, colors, state)
+        TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.ASPECT -> return drawAccessory(tile, left, top, cell, colors, state)
+        else -> Unit
+    }
+
     val occupied = kind == TileKind.FEEDBACK && tile.feedbackModule != null &&
         (tile.feedbackModule to tile.feedbackContact) in state.occupied
     val active: Branch? = if (state.operating && kind == TileKind.TURNOUT) {
         tile.activeBranch(state.turnouts) ?: Branch.MAIN
     } else {
         null
+    }
+    val closed = kind == TileKind.GATE && state.operating && tile.isOn(state.turnouts)
+    if (kind == TileKind.GATE) {
+        // Strasse quer zum Gleis
+        val g = tile.segments().first()
+        val roadAlong = Offset(DX[(g.from + 2) % 8], DY[(g.from + 2) % 8]).let { it / it.getDistance() }
+        drawLine(colors.dimmed, c + roadAlong * (cell * 0.5f), c - roadAlong * (cell * 0.5f), strokeWidth = cell * 0.46f)
     }
     // Nicht befahrene Straenge zuerst, damit der befahrene obenauf liegt.
     val segments = tile.segments().sortedBy { active != null && it.branch == active }
@@ -251,6 +290,19 @@ internal fun DrawScope.drawTile(
                 CornerRadius(cell * 0.06f),
                 style = Stroke(width = width * 0.5f),
             )
+        }
+        TileKind.GATE -> {
+            // Schranken beidseits des Gleises: geschlossen rot quer ueber der Strasse, offen kurz und hochgeklappt
+            val bar = if (closed) colors.signalRed else colors.track
+            for (sign in listOf(1f, -1f)) {
+                val post = c + across * (cell * 0.36f * sign)
+                if (closed) {
+                    drawLine(bar, post - along * (cell * 0.24f), post + along * (cell * 0.24f), strokeWidth = width * 0.7f, cap = StrokeCap.Round)
+                } else {
+                    drawLine(bar, post - along * (cell * 0.24f), post - along * (cell * 0.24f) + across * (cell * 0.12f * sign), strokeWidth = width * 0.6f, cap = StrokeCap.Round)
+                }
+                drawCircle(bar, width * 0.5f, post - along * (cell * 0.24f))
+            }
         }
         TileKind.SIGNAL -> if (image != null) {
             // Wie in iTrain: Signal neben dem Gleis, Mastfuss am Gleis, Schirm zeigt vom Gleis weg
@@ -310,4 +362,145 @@ fun TrackPlanPicker(
             }
         }
     }
+}
+
+/** Relais, Licht, Sound und Zubehoer mit Bildern als Zeichen in der Kachel; eingeschaltet farbig. */
+private fun DrawScope.drawAccessory(tile: TrackTile, left: Float, top: Float, cell: Float, colors: TrackColors, state: TrackState) {
+    val c = Offset(left + cell / 2, top + cell / 2)
+    val on = state.operating && tile.isOn(state.turnouts)
+    val line = (cell * 0.07f).coerceAtLeast(1f)
+    val frame = Size(cell * 0.76f, cell * 0.76f)
+    val frameTopLeft = Offset(c.x - frame.width / 2, c.y - frame.height / 2)
+    drawRoundRect(colors.background, frameTopLeft, frame, CornerRadius(cell * 0.12f))
+    drawRoundRect(colors.track, frameTopLeft, frame, CornerRadius(cell * 0.12f), style = Stroke(line))
+    when (tile.shape.kind) {
+        TileKind.RELAY -> {
+            // Spule links, Kontakt rechts: offen schraeg, geschlossen gerade und gruen
+            val coil = Size(cell * 0.18f, cell * 0.36f)
+            drawRect(colors.track, Offset(c.x - cell * 0.26f, c.y - coil.height / 2), coil, style = Stroke(line))
+            val pivot = Offset(c.x, c.y + cell * 0.14f)
+            val end = if (on) Offset(c.x + cell * 0.26f, c.y + cell * 0.14f) else Offset(c.x + cell * 0.22f, c.y - cell * 0.08f)
+            val contact = if (on) colors.signalGreen else colors.track
+            drawLine(contact, pivot, end, strokeWidth = line * 1.3f, cap = StrokeCap.Round)
+            drawCircle(contact, line * 1.1f, pivot)
+            drawCircle(contact, line * 1.1f, Offset(c.x + cell * 0.26f, c.y + cell * 0.14f))
+        }
+        TileKind.LIGHT -> {
+            val bulb = Offset(c.x, c.y - cell * 0.04f)
+            if (on) {
+                drawCircle(colors.uncoupler.copy(alpha = 0.35f), cell * 0.3f, bulb)
+                drawCircle(colors.uncoupler, cell * 0.17f, bulb)
+            } else {
+                drawCircle(colors.track, cell * 0.17f, bulb, style = Stroke(line))
+            }
+            drawLine(colors.track, Offset(c.x - cell * 0.08f, c.y + cell * 0.2f), Offset(c.x + cell * 0.08f, c.y + cell * 0.2f), strokeWidth = line * 1.4f)
+        }
+        TileKind.SOUND -> {
+            val col = if (on) colors.signalGreen else colors.track
+            val speaker = Path().apply {
+                moveTo(c.x - cell * 0.24f, c.y - cell * 0.08f)
+                lineTo(c.x - cell * 0.12f, c.y - cell * 0.08f)
+                lineTo(c.x + cell * 0.02f, c.y - cell * 0.2f)
+                lineTo(c.x + cell * 0.02f, c.y + cell * 0.2f)
+                lineTo(c.x - cell * 0.12f, c.y + cell * 0.08f)
+                lineTo(c.x - cell * 0.24f, c.y + cell * 0.08f)
+                close()
+            }
+            drawPath(speaker, col)
+            for (r in listOf(0.12f, 0.22f)) {
+                drawArc(col, -45f, 90f, false, Offset(c.x + cell * 0.02f - cell * r, c.y - cell * r), Size(cell * r * 2, cell * r * 2), style = Stroke(line, cap = StrokeCap.Round))
+            }
+        }
+        else -> {
+            // Zubehoer mit Bildern: ein Punkt je Bild, das aktuelle leuchtet
+            val count = tile.aspectNames().size
+            val current = tile.address?.let { state.aspects[it] }
+            val perRow = if (count > 4) (count + 1) / 2 else count
+            val rows = if (count > 4) 2 else 1
+            val step = cell * 0.6f / perRow
+            for (i in 0 until count) {
+                val col = i % perRow
+                val row = i / perRow
+                val p = Offset(c.x - cell * 0.3f + step * (col + 0.5f), c.y + (row - (rows - 1) / 2f) * cell * 0.22f)
+                val lit = state.operating && i == current
+                drawCircle(if (lit) colors.signalGreen else colors.dimmed, (step * 0.32f).coerceAtMost(cell * 0.08f), p)
+            }
+        }
+    }
+}
+
+/**
+ * Drehscheibe: Grube um die Kachel mit Radius aus dem Reiter Zubehoer, Anschluesse an den Gleispositionen
+ * (Position 0 oben, im Uhrzeigersinn) und die Buehne an ihrer aktuellen Position; waehrend sie dreht, gelb.
+ */
+private fun DrawScope.drawTurntable(tile: TrackTile, left: Float, top: Float, cell: Float, colors: TrackColors, state: TrackState) {
+    val config = TableConfig.of(tile)
+    val c = Offset(left + cell / 2, top + cell / 2)
+    val pit = (config.radius + 0.5f) * cell * 0.94f
+    val line = (cell * 0.07f).coerceAtLeast(1f)
+    val width = cell * 0.16f
+    drawCircle(colors.background, pit, c)
+    drawCircle(colors.track, pit, c, style = Stroke(line * 1.2f))
+    drawCircle(colors.dimmed, pit * 0.86f, c, style = Stroke(line * 0.6f))
+    fun dir(position: Int): Offset {
+        val angle = position * 2 * PI / config.positions
+        return Offset(sin(angle).toFloat(), -cos(angle).toFloat())
+    }
+    for (p in config.tracks) {
+        val d = dir(p)
+        drawLine(colors.track, c + d * (pit * 0.86f), c + d * (pit + cell * 0.5f * 0.06f), strokeWidth = width, cap = StrokeCap.Butt)
+    }
+    val base = tile.address
+    val position = base?.let { state.tablePositions[it] }
+    val moving = base != null && base in state.moving
+    val d = dir(position ?: config.tracks.first())
+    val bridge = when {
+        moving -> colors.uncoupler
+        position == null || !state.operating -> colors.track
+        else -> colors.selection
+    }
+    val across = Offset(-d.y, d.x)
+    val half = pit * 0.84f
+    drawLine(bridge.copy(alpha = 0.35f), c + d * half, c - d * half, strokeWidth = cell * 0.5f)
+    drawLine(bridge, c + d * half, c - d * half, strokeWidth = width, cap = StrokeCap.Butt)
+    // Haeuschen markiert das Buehnenende, das an der Position steht
+    val hut = c + d * (half - cell * 0.18f) + across * (cell * 0.2f)
+    drawCircle(bridge, cell * 0.09f, hut)
+    drawCircle(colors.track, cell * 0.08f, c)
+}
+
+/**
+ * Schiebebuehne: Grube ueber alle Gleise, Anschluesse links und rechts (bzw. oben und unten),
+ * die Buehne steht an der aktuellen Position.
+ */
+private fun DrawScope.drawTransferTable(tile: TrackTile, left: Float, top: Float, cell: Float, colors: TrackColors, state: TrackState) {
+    val config = TableConfig.of(tile)
+    val area = tile.footprint()
+    val origin = Offset(left + (area.x - tile.x) * cell, top + (area.y - tile.y) * cell)
+    val size = Size(area.width * cell, area.height * cell)
+    val line = (cell * 0.07f).coerceAtLeast(1f)
+    val width = cell * 0.16f
+    val inset = cell * 0.3f
+    drawRect(colors.background, origin + Offset(inset, 0f).let { if (config.vertical) Offset(0f, inset) else it }, if (config.vertical) Size(size.width, size.height - 2 * inset) else Size(size.width - 2 * inset, size.height))
+    drawRect(colors.track, origin + if (config.vertical) Offset(0f, inset) else Offset(inset, 0f), if (config.vertical) Size(size.width, size.height - 2 * inset) else Size(size.width - 2 * inset, size.height), style = Stroke(line * 1.2f))
+    // Mitte des Gleises an Position p und die Richtung entlang der Gleise
+    fun center(p: Int) = if (config.vertical) Offset(origin.x + (p + 0.5f) * cell, origin.y) else Offset(origin.x, origin.y + (p + 0.5f) * cell)
+    val along = if (config.vertical) Offset(0f, 1f) else Offset(1f, 0f)
+    val length = config.length * cell
+    for (p in config.tracks) {
+        val start = center(p)
+        drawLine(colors.track, start, start + along * inset, strokeWidth = width)
+        drawLine(colors.track, start + along * (length - inset), start + along * length, strokeWidth = width)
+    }
+    val base = tile.address
+    val position = base?.let { state.tablePositions[it] }
+    val moving = base != null && base in state.moving
+    val bridge = when {
+        moving -> colors.uncoupler
+        position == null || !state.operating -> colors.track
+        else -> colors.selection
+    }
+    val start = center(position ?: config.tracks.first())
+    drawLine(bridge.copy(alpha = 0.35f), start + along * inset, start + along * (length - inset), strokeWidth = cell * 0.62f)
+    drawLine(bridge, start + along * inset, start + along * (length - inset), strokeWidth = width)
 }

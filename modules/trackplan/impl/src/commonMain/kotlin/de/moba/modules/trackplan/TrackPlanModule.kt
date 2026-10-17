@@ -19,8 +19,21 @@ import de.moba.modules.trackplan.api.TrackPlanStore
 import de.moba.modules.trackplan.api.TrackShape
 import de.moba.modules.trackplan.api.TrackTile
 import de.moba.modules.trackplan.api.activeBranch
+import de.moba.modules.trackplan.api.AccessoryProps
+import de.moba.modules.trackplan.api.FeedbackList
+import de.moba.modules.trackplan.api.TableCommand
+import de.moba.modules.trackplan.api.TableConfig
+import de.moba.modules.trackplan.api.aspectNames
+import de.moba.modules.trackplan.api.isOn
+import de.moba.modules.trackplan.api.outputFor
+import de.moba.modules.trackplan.api.pulseMillis
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 
@@ -62,7 +75,7 @@ class TrackPlanModule(private val repository: TrackPlanRepository) : MobaModule 
     override val licenseKey: String? = null
 
     override suspend fun start(ctx: ModuleContext) {
-        val service = TrackPlanServiceImpl(repository, ctx.station, ctx.license)
+        val service = TrackPlanServiceImpl(repository, ctx.station, ctx.license, ctx.scope)
         ctx.events.on<StationEvent.TurnoutChanged>(ctx.scope) { service.onTurnout(it.address, it.thrown) }
         ctx.events.on<StationEvent.FeedbackChanged>(ctx.scope) { service.onFeedback(it.module, it.contact, it.occupied) }
         ctx.provide<TrackPlanService>(service)
@@ -76,7 +89,6 @@ class TrackPlanModule(private val repository: TrackPlanRepository) : MobaModule 
         val MULTI_VIEW_LICENSE_KEYS = listOf("pro", "club")
         const val FREE_VISIBLE_PLANS = 1
         const val PRO_VISIBLE_PLANS = 3
-        const val UNCOUPLER_PULSE_MILLIS = 500L
     }
 }
 
@@ -84,6 +96,7 @@ internal class TrackPlanServiceImpl(
     private val repository: TrackPlanRepository,
     private val station: CommandStation,
     license: LicenseInfo,
+    private val scope: CoroutineScope,
 ) : TrackPlanService {
     override val plans: StateFlow<List<TrackPlan>> = repository.plans
     override val unsaved: StateFlow<Boolean> = repository.unsaved
@@ -150,6 +163,7 @@ internal class TrackPlanServiceImpl(
     }
 
     override suspend fun operate(tile: TrackTile) {
+        if (tile.shape.kind == TileKind.SOUND) return setOn(tile, true)
         val address = tile.address ?: return
         when (tile.shape.kind) {
             TileKind.TURNOUT -> if (tile.shape == TrackShape.TURNOUT_THREE_WAY) {
@@ -173,14 +187,97 @@ internal class TrackPlanServiceImpl(
             }
             // Signale: zwischen Halt (Bild 0) und Fahrt (Bild 1) wechseln, weitere Bilder ueber setAspect
             TileKind.SIGNAL -> setAspect(tile, if (currentAspect(address) == 0) 1 else 0)
+            // Zubehoer mit Bildern: reihum zum naechsten Bild
+            TileKind.ASPECT -> setAspect(tile, (currentAspect(address) + 1) % tile.aspectNames().size)
             // Symbole: an/aus umschalten (Zustand 1 bzw. 0)
             TileKind.SYMBOL -> station.setTurnout(address, thrown = _turnouts.value[address] != true)
+            TileKind.RELAY, TileKind.LIGHT, TileKind.GATE -> setOn(tile, !tile.isOn(_turnouts.value))
             TileKind.UNCOUPLER -> {
                 station.setTurnout(address, thrown = true)
-                delay(TrackPlanModule.UNCOUPLER_PULSE_MILLIS)
+                delay(tile.pulseMillis() ?: 500L)
                 station.setTurnout(address, thrown = false)
             }
             else -> Unit
+        }
+    }
+
+    override suspend fun setOn(tile: TrackTile, on: Boolean) {
+        if (on && tile.shape.kind == TileKind.SOUND) tile.prop(AccessoryProps.FILE).takeIf { it.isNotEmpty() }?.let { _sounds.tryEmit(it) }
+        val address = tile.address ?: return
+        station.setTurnout(address, tile.outputFor(on))
+        val pulse = tile.pulseMillis() ?: return
+        if (on) {
+            delay(pulse)
+            station.setTurnout(address, tile.outputFor(false))
+        }
+    }
+
+    private val _sounds = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    override val sounds: SharedFlow<String> = _sounds
+
+    private val _positions = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    override val tablePositions: StateFlow<Map<Int, Int>> = _positions
+
+    private val _moving = MutableStateFlow<Set<Int>>(emptySet())
+    override val tablesMoving: StateFlow<Set<Int>> = _moving
+    private val movingJobs = mutableMapOf<Int, Job>()
+
+    override suspend fun turnTo(tile: TrackTile, position: Int) {
+        val base = tile.address ?: return
+        val config = TableConfig.of(tile)
+        require(position in 0 until config.positions) { "Position $position gibt es nicht" }
+        checkUnlocked(config)
+        val from = _positions.value[base]
+        val out = config.output(base, position)
+        station.setTurnout(out.address, out.thrown)
+        moved(base, config, from, position)
+    }
+
+    override suspend fun tableCommand(tile: TrackTile, command: TableCommand) {
+        val base = tile.address ?: return
+        val config = TableConfig.of(tile)
+        checkUnlocked(config)
+        val from = _positions.value[base]
+        val current = from ?: config.tracks.first()
+        val target = when (command) {
+            TableCommand.TURN_180 -> (current + config.positions / 2) % config.positions
+            TableCommand.STEP_CW -> config.tracks.firstOrNull { it > current } ?: config.tracks.first()
+            TableCommand.STEP_CCW -> config.tracks.lastOrNull { it < current } ?: config.tracks.last()
+        }
+        val explicit = when (command) {
+            TableCommand.TURN_180 -> config.turn
+            TableCommand.STEP_CW -> config.stepCw
+            TableCommand.STEP_CCW -> config.stepCcw
+        }
+        // Ohne eigenen Befehl faehrt die Buehne das Zielgleis direkt an
+        if (explicit == null) return turnTo(tile, target)
+        station.setTurnout(explicit.address, explicit.thrown)
+        moved(base, config, from, target)
+    }
+
+    private fun checkUnlocked(config: TableConfig) {
+        val block = config.blockFeedback
+        if (config.lockWhileOccupied && block != null && block in _occupied.value) {
+            throw IllegalStateException("Die Bühne ist belegt und darf sich nicht bewegen.")
+        }
+    }
+
+    /** Neue Position merken; die Buehne gilt als in Bewegung, bis der Fertig-Melder kommt oder die Schrittzeit um ist. */
+    private fun moved(base: Int, config: TableConfig, from: Int?, to: Int) {
+        _positions.update { it + (base to to) }
+        movingJobs.remove(base)?.cancel()
+        val steps = if (from == null) 1 else minOf((to - from).mod(config.positions), (from - to).mod(config.positions))
+        when {
+            from == to -> _moving.update { it - base }
+            config.ready != null -> _moving.update { it + base }
+            config.stepMillis > 0 -> {
+                _moving.update { it + base }
+                movingJobs[base] = scope.launch {
+                    delay(config.stepMillis * steps)
+                    _moving.update { it - base }
+                }
+            }
+            else -> _moving.update { it - base }
         }
     }
 
@@ -196,20 +293,58 @@ internal class TrackPlanServiceImpl(
 
     fun onTurnout(address: Int, thrown: Boolean) {
         _turnouts.update { it + (address to thrown) }
-        // Gehoert die Adresse zu einem Signal? Dann das naechstliegende Signal mit kleinerer Grundadresse.
         val tiles = repository.plans.value.flatMap { it.tiles }
+        // Drehscheiben und Schiebebuehnen: Meldung einer Gleisadresse = Buehne steht an diesem Gleis
+        for (t in tiles.filter { it.shape.isTable }) {
+            val base = t.address ?: continue
+            val config = TableConfig.of(t)
+            config.positionFor(base, address, thrown)?.let { p -> _positions.update { it + (base to p) } }
+        }
+        // Gehoert die Adresse zu einem Signal? Dann das naechstliegende Signal mit kleinerer Grundadresse.
+        val multi = setOf(TileKind.SIGNAL, TileKind.ASPECT)
         val usedElsewhere = tiles.any { t ->
             val a = t.address
-            t.shape.kind != TileKind.SIGNAL && a != null && address in a until a + t.shape.addressCount
+            t.shape.kind !in multi && a != null && address in a until a + t.shape.addressCount
         }
         if (usedElsewhere) return
-        val base = tiles.filter { it.shape.kind == TileKind.SIGNAL }.mapNotNull { it.address }
+        val base = tiles.filter { it.shape.kind in multi }.mapNotNull { it.address }
             .filter { it <= address && address - it < SignalAddressing.MAX_ASPECTS / 2 }
             .maxOrNull() ?: return
         _aspects.update { it + (base to SignalAddressing.aspect(base, address, thrown)) }
     }
 
-    fun onFeedback(module: Int, contact: Int, occupied: Boolean) = _occupied.update {
-        if (occupied) it + (module to contact) else it - (module to contact)
+    fun onFeedback(module: Int, contact: Int, occupied: Boolean) {
+        val ref = module to contact
+        val changed = (ref in _occupied.value) != occupied
+        _occupied.update { if (occupied) it + ref else it - ref }
+        if (changed) automate(ref, occupied)
+    }
+
+    /**
+     * Steuerung wie in iTrain: Einschalt-Melder schalten Zubehoer ein, sobald sie belegt werden (z. B. Bahnuebergang
+     * schliessen, Sound abspielen), Ausschalt-Melder wieder aus, sobald der Zug sie verlassen hat. Ohne Ausschalt-Melder geht es aus, sobald alle Einschalt-Melder frei sind.
+     * Der Fertig-Melder einer Drehscheibe beendet ihre Bewegung.
+     */
+    private fun automate(ref: Pair<Int, Int>, occupied: Boolean) {
+        for (t in repository.plans.value.flatMap { it.tiles }) {
+            if (t.shape.isTable) {
+                val base = t.address ?: continue
+                if (occupied && TableConfig.of(t).ready == ref) {
+                    movingJobs.remove(base)?.cancel()
+                    _moving.update { it - base }
+                }
+                continue
+            }
+            if (!t.shape.switchable) continue
+            val on = FeedbackList.parse(t.prop(AccessoryProps.ON_FEEDBACK))
+            val off = FeedbackList.parse(t.prop(AccessoryProps.OFF_FEEDBACK))
+            val switchOn = occupied && ref in on
+            val switchOff = when {
+                t.shape.kind == TileKind.SOUND -> false
+                off.isNotEmpty() -> !occupied && ref in off
+                else -> !occupied && ref in on && on.none { it in _occupied.value }
+            }
+            if (switchOn || switchOff) scope.launch { setOn(t, switchOn) }
+        }
     }
 }

@@ -20,6 +20,7 @@ import de.moba.modules.trackplan.FileTrackPlanStore
 import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.trackplan.ui.TrackPlanScreen
+import de.moba.modules.trackplan.ui.TrackPlanSounds
 import de.moba.modules.trackplan.ui.TrackPlanWindows
 import de.moba.modules.symbols.FileSymbolStore
 import de.moba.modules.symbols.SymbolModule
@@ -52,9 +53,13 @@ import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.ModuleWindowsHost
 import de.moba.ui.shell.SettingsStore
+import de.moba.ui.shell.SoundSupport
+import de.moba.ui.shell.soundFileName
 import java.awt.FileDialog
 import org.jetbrains.skia.Image
 import java.io.File
+import javax.sound.sampled.AudioSystem
+import javax.sound.sampled.LineEvent
 import java.util.prefs.Preferences
 
 /** Einstellungen in der Windows-Registry (Java Preferences). */
@@ -99,6 +104,39 @@ private fun imagePicker(window: java.awt.Frame) = ImagePicker { onResult ->
     onResult(chosen?.readBytes())
 }
 
+/** Klaenge fuer Sound-Zubehoer: Dateidialog, Kopie in "klaenge" im Datenordner, Wiedergabe mit Java Sound. */
+private class DesktopSound(private val window: java.awt.Frame) : SoundSupport {
+    private val dir = File(dataDir, "klaenge")
+    override val formats = "WAV, AIFF oder AU."
+
+    override fun pick(onResult: (String?) -> Unit) {
+        val dialog = FileDialog(window, "Klangdatei wählen", FileDialog.LOAD).apply {
+            setFilenameFilter { _, name -> name.substringAfterLast('.').lowercase() in setOf("wav", "aiff", "aif", "au") }
+            file = "*.wav;*.aiff;*.aif;*.au"
+            isVisible = true
+        }
+        val chosen = dialog.files.firstOrNull() ?: return onResult(null)
+        onResult(
+            runCatching {
+                dir.mkdirs()
+                val name = soundFileName(chosen.name)
+                chosen.copyTo(File(dir, name), overwrite = true)
+                name
+            }.getOrNull(),
+        )
+    }
+
+    override fun play(name: String) {
+        val file = File(dir, soundFileName(name)).takeIf { it.isFile } ?: return
+        runCatching {
+            val clip = AudioSystem.getClip()
+            clip.addLineListener { if (it.type == LineEvent.Type.STOP) clip.close() }
+            clip.open(AudioSystem.getAudioInputStream(file))
+            clip.start()
+        }
+    }
+}
+
 private val appIcon = BitmapPainter(
     Image.makeFromEncoded(object {}.javaClass.getResourceAsStream("/icon.png")!!.readBytes()).toComposeImageBitmap(),
 )
@@ -126,6 +164,7 @@ fun main() = application {
         state = rememberWindowState(width = 1360.dp, height = 860.dp),
     ) {
         val picker = remember { imagePicker(window) }
+        val sound = remember { DesktopSound(window) }
         MobaShell(
             app,
             screens = listOf(DrivingScreen, VehiclesScreen, DecoderScreen, TrackPlanScreen, SymbolsScreen, CalibrationScreen, RoutesScreen),
@@ -136,6 +175,8 @@ fun main() = application {
             exitGuard = exitGuard,
             onExit = ::exitApplication,
             separateWindows = true,
+            sound = sound,
+            effects = listOf(TrackPlanSounds),
         )
     }
     // Gleisbilder in eigenen Fenstern (Pro), z. B. auf einem zweiten und dritten Bildschirm

@@ -172,6 +172,29 @@ Die Gleisbilder liegen in `gleisbilder.txt` (Windows: `%USERPROFILE%\.modellbahn
 Android: App-Speicher). Ohne gespeicherte Datei startet die App mit einer Beispielanlage.
 Eine Dreiwegweiche belegt zwei Adressen: die eingetragene fuer links, die naechste fuer rechts.
 
+### Zubehoer wie in iTrain
+
+Weitere Formen in der Leiste "Gleisformen": Zubehoer mit Bildern (Aspekt), Relais, Licht, Sound, Bahnuebergang,
+Drehscheibe und Schiebebuehne. Ihre Einstellungen stehen im Editor in Reitern:
+
+| Zubehoer | Reiter |
+|---|---|
+| Relais, Licht, Bahnuebergang, Entkuppler | Allgemein (Name), Decoder (Adresse, "Ein" = rot oder gruen), Steuerung (Impulsdauer, Einschalt- und Ausschalt-Melder) |
+| Zubehoer mit Bildern | Allgemein (Name, Bilder z. B. `Aus\|Blinken\|Dauerlicht`, bis 8), Decoder (Grundadresse, Adresspaare wie bei Signalen) |
+| Sound | Datei (Klangdatei waehlen, Probehoeren), Decoder (Adresse optional), Steuerung (Einschalt-Melder) |
+| Drehscheibe, Schiebebuehne | Allgemein, Decoder (Grundadresse, Adresspaare oder eine Adresse je Gleis), Zubehoer (Positionen, angeschlossene Gleise, Radius/Laenge), Rueckmelder (Fertig-Melder, Zeit je Position), Block (Blockname, Melder "Buehne belegt", Sperre), Steuern (Befehle 180°, Schritt rechts/links als `Adresse:r` oder `Adresse:g`) |
+
+Im Betrieb schaltet ein Klick Relais, Licht und Bahnuebergang ein oder aus, spielt einen Sound ab und oeffnet
+bei Zubehoer mit Bildern die Bildliste. Ein Klick auf eine Drehscheibe oder Schiebebuehne oeffnet ihre Steuerung:
+Gleis anfahren, 180° drehen, Schritt links/rechts. Ohne eigenen Befehl faehrt die Buehne das Zielgleis ueber seine
+Gleisadresse an (Adresspaare: Gleis 0 = Grundadresse rot, Gleis 1 = gruen, Gleis 2 = Adresse + 1 rot ...).
+Waehrend sie dreht, ist die Buehne gelb, bis der Fertig-Melder kommt oder die Zeit je Position um ist. Ist die
+Sperre im Reiter Block an, bewegt sie sich nicht, solange der Melder "Buehne belegt" belegt ist.
+Melder schalten automatisch: Wird ein Einschalt-Melder belegt, schaltet das Zubehoer ein (Bahnuebergang schliesst,
+Sound spielt). Hat der Zug den Ausschalt-Melder verlassen, schaltet es aus; ohne Ausschalt-Melder, sobald alle
+Einschalt-Melder frei sind. Klaenge legt die App als Kopie im Ordner `klaenge` ab (Windows: WAV, AIFF, AU;
+Android: MP3, OGG, WAV); sie spielen auch, wenn gerade eine andere Ansicht offen ist.
+
 ## Fahrpult
 
 Am PC ist das Fahrpult rechts anfangs ausgeblendet. Der Tacho-Knopf oben neben "Gleis an/aus" blendet es ein

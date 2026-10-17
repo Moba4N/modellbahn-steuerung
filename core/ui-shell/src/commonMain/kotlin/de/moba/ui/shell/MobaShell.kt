@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -126,6 +127,10 @@ fun MobaShell(
     onExit: () -> Unit = {},
     /** Die Plattform kann eigene Fenster oeffnen, z. B. Gleisbilder auf weiteren Bildschirmen (Windows). */
     separateWindows: Boolean = false,
+    /** Klaenge abspielen, z. B. fuer Sound-Zubehoer im Gleisbild. */
+    sound: SoundSupport? = null,
+    /** Unsichtbare Begleiter der Module, siehe [ModuleEffect]. */
+    effects: List<ModuleEffect> = emptyList(),
 ) {
     SideEffect { ShellUiState.separateWindows.value = separateWindows }
     val dark by app.darkTheme.collectAsState()
@@ -141,6 +146,7 @@ fun MobaShell(
     val activePanels = panels.filter { active(it.moduleId) }
     val activeDocks = docks.filter { active(it.moduleId) }
     val activeTools = tools.filter { active(it.moduleId) }
+    val activeEffects = effects.filter { active(it.moduleId) }
     val openTool by ShellUiState.openTool.collectAsState()
     LaunchedEffect(app) {
         ShellUiState.panelOpen.value = app.preference(PREF_PANEL) == "an"
@@ -158,8 +164,10 @@ fun MobaShell(
                 CompositionLocalProvider(
                     LocalWideLayout provides wide,
                     LocalImagePicker provides imagePicker,
+                    LocalSoundSupport provides sound,
                     LocalPanelVisible provides showPanel,
                 ) {
+                activeEffects.forEach { effect -> key(effect.moduleId) { effect.Run(app) } }
                 Column(Modifier.fillMaxSize()) {
                     TopBar(
                         app,

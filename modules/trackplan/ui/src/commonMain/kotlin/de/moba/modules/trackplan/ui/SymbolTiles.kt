@@ -35,6 +35,7 @@ import de.moba.modules.symbols.ui.SymbolImage
 import de.moba.modules.trackplan.api.SignalAddressing
 import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackTile
+import de.moba.modules.trackplan.api.aspectNames
 
 /** Kennzeichnet in [TrackTile.symbol] ein mitgeliefertes Signalsystem statt eines eigenen Symbols. */
 internal const val SIGNAL_PREFIX = "signal:"
@@ -87,20 +88,22 @@ internal fun symbolImage(
     return states.getOrElse(index) { states.first() }.image
 }
 
-/** Auswahl des Signalbilds wie in iTrain: alle Bilder mit Vorschau und Adresse. */
+/** Auswahl des Signalbilds wie in iTrain: alle Bilder mit Vorschau und Adresse; bei Zubehoer mit Bildern deren Namen. */
 @Composable
 internal fun AspectMenu(tile: TrackTile, current: Int?, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     val states = tileStates(tile, LocalSymbolLibrary.current)
     val base = tile.address ?: return
+    val names = if (tile.shape.kind == TileKind.ASPECT) tile.aspectNames() else states.map { it.name }
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
-        states.forEachIndexed { i, state ->
+        names.forEachIndexed { i, name ->
+            val state = states.getOrNull(i).takeIf { tile.shape.kind != TileKind.ASPECT }
             DropdownMenuItem(
-                leadingIcon = { SymbolImage(state.image, Modifier.size(36.dp)) },
+                leadingIcon = state?.let { { SymbolImage(it.image, Modifier.size(36.dp)) } },
                 text = {
                     Column {
-                        Text(state.name, fontWeight = if (i == current) FontWeight.Bold else FontWeight.Normal)
+                        Text(name, fontWeight = if (i == current) FontWeight.Bold else FontWeight.Normal)
                         Text(
-                            listOf(state.meaning, outputLabel(base, i)).filter { it.isNotBlank() }.joinToString(" · "),
+                            listOf(state?.meaning.orEmpty(), outputLabel(base, i)).filter { it.isNotBlank() }.joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -121,10 +124,10 @@ internal fun outputLabel(base: Int, aspect: Int): String {
 @Composable
 internal fun AspectAddresses(tile: TrackTile) {
     val base = tile.address ?: return
-    val states = tileStates(tile, LocalSymbolLibrary.current)
-    if (states.size < 2) return
+    val names = if (tile.shape.kind == TileKind.ASPECT) tile.aspectNames() else tileStates(tile, LocalSymbolLibrary.current).map { it.name }
+    if (names.size < 2) return
     Text(
-        states.mapIndexed { i, s -> "${s.name}: ${outputLabel(base, i).removePrefix("Adresse ")}" }.joinToString("  ·  "),
+        names.mapIndexed { i, s -> "$s: ${outputLabel(base, i).removePrefix("Adresse ")}" }.joinToString("  ·  "),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

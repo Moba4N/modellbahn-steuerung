@@ -122,6 +122,12 @@ object TrackPlanUiState {
 
     /** Signalbild fuer neu gesetzte Signale: das zuletzt gewaehlte, anfangs das H/V-Lichthauptsignal. */
     val lastSignal = MutableStateFlow("signal:de-hv-hp")
+
+    /** Offener Reiter der Zubehoer-Eigenschaften (Allgemein, Decoder, Steuerung ...). */
+    val accessoryTab = MutableStateFlow(0)
+
+    /** Offene Steuerung einer Drehscheibe/Schiebebuehne im Betrieb als (Gleisbild-Id, Zelle). */
+    val openTable = MutableStateFlow<Pair<String, Pair<Int, Int>>?>(null)
 }
 
 /** Reiter "Gleisbild": Betrieb (Weichen schalten, Belegung sehen) und Editor. */
@@ -229,20 +235,34 @@ internal fun rememberPlanOperation(service: TrackPlanService): PlanOperation {
     val scope = rememberCoroutineScope()
     val library = LocalSymbolLibrary.current
     val aspects by service.signalAspects.collectAsState()
-    val state = TrackState(turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, aspects, library) })
+    val positions by service.tablePositions.collectAsState()
+    val allPlans by service.plans.collectAsState()
+    val moving by service.tablesMoving.collectAsState()
+    val state = TrackState(
+        turnouts, occupied, operating = true, symbolImage = { symbolImage(it, turnouts, aspects, library) },
+        aspects = aspects, tablePositions = positions, moving = moving,
+    )
     // Offenes Signalbild-Menue (Gleisbild-Id, Kachel), wie in iTrain per Klick aufs Signal
     var aspectMenu by remember { mutableStateOf<Pair<String, TrackTile>?>(null) }
+    val table by TrackPlanUiState.openTable.collectAsState()
     val onTap = { plan: TrackPlan, x: Int, y: Int ->
-        plan.tileAt(x, y)?.takeIf { it.shape.hasAddress && it.address != null }?.let { tile ->
-            if (tile.shape.kind == TileKind.SIGNAL && tileStates(tile, library).size > 2) {
-                aspectMenu = plan.id to tile
-            } else {
-                scope.launch {
+        plan.objectAt(x, y)?.takeIf { it.shape.hasAddress && (it.address != null || it.shape.kind == TileKind.SOUND) }?.let { tile ->
+            when {
+                tile.shape.isTable -> TrackPlanUiState.openTable.value = plan.id to (tile.x to tile.y)
+                tile.shape.kind == TileKind.ASPECT ||
+                    tile.shape.kind == TileKind.SIGNAL && tileStates(tile, library).size > 2 -> aspectMenu = plan.id to tile
+                else -> scope.launch {
                     runCatching { service.operate(tile) }.onFailure { say("Schalten nicht möglich: ${it.message}") }
                 }
             }
         }
         Unit
+    }
+    table?.let { (planId, cell) ->
+        // Immer die aktuelle Fassung der Kachel, falls sie im Editor geaendert wurde
+        val tile = allPlans.firstOrNull { it.id == planId }?.tileAt(cell.first, cell.second)
+        if (tile == null) TrackPlanUiState.openTable.value = null
+        else TableControlDialog(service, tile, onDismiss = { TrackPlanUiState.openTable.value = null })
     }
     val menu = { plan: TrackPlan ->
         aspectMenu?.takeIf { it.first == plan.id }?.second?.let { tile ->
@@ -657,15 +677,17 @@ private fun EditorGrid(service: TrackPlanService, plan: TrackPlan, modifier: Mod
     val tap = { x: Int, y: Int ->
         val current = service.plans.value.firstOrNull { it.id == planId }
         val tile = current?.tileAt(x, y)
+        // Drehscheiben und Schiebebuehnen sind ueber ihre ganze Flaeche auswaehlbar
+        val target = current?.objectAt(x, y)
         when (val t = TrackPlanUiState.tool.value) {
-            EditTool.Select -> TrackPlanUiState.selected.value = if (tile != null) x to y else null
-            EditTool.Rotate -> if (tile != null) {
-                service.change(planId) { it.rotate(x, y) }
-                TrackPlanUiState.selected.value = x to y
+            EditTool.Select -> TrackPlanUiState.selected.value = target?.let { it.x to it.y }
+            EditTool.Rotate -> if (target != null) {
+                service.change(planId) { it.rotate(target.x, target.y) }
+                TrackPlanUiState.selected.value = target.x to target.y
             }
-            EditTool.Erase -> {
-                service.change(planId) { it.remove(x, y) }
-                if (TrackPlanUiState.selected.value == x to y) TrackPlanUiState.selected.value = null
+            EditTool.Erase -> if (target != null) {
+                service.change(planId) { it.remove(target.x, target.y) }
+                if (TrackPlanUiState.selected.value == target.x to target.y) TrackPlanUiState.selected.value = null
             }
             is EditTool.Place -> {
                 // Gleiche Form nochmal antippen dreht sie, andere Form ersetzt die Kachel.
@@ -743,6 +765,9 @@ private fun ToolButton(label: String, icon: ImageVector, showLabel: Boolean, ena
         IconButton(enabled = enabled, onClick = onClick) { Icon(icon, label) }
     }
 }
+
+/** Kacheln, bei denen die Drehung nichts aendert. */
+private val UNROTATED = setOf(TileKind.TEXT, TileKind.SYMBOL, TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.ASPECT, TileKind.TURNTABLE)
 
 /** Kennung des Editor-Rasters fuer Oberflaechentests. */
 const val EDITOR_GRID_TAG = "gleisbild-raster"
@@ -824,7 +849,7 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (tile.shape != TrackShape.TEXT && tile.shape != TrackShape.SYMBOL) {
+                if (tile.shape.kind !in UNROTATED) {
                     IconButton(onClick = { set(tile.copy(rotation = (tile.rotation - 1).mod(8))) }) {
                         Icon(Icons.Outlined.Rotate90DegreesCcw, "Links drehen")
                     }
@@ -838,7 +863,7 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                         set(tile.copy(symbol = it))
                     }
                 }
-                if (tile.shape.hasAddress) {
+                if (tile.shape.hasAddress && !hasAccessoryTabs(tile)) {
                     val label = when {
                         tile.shape.kind == TileKind.SYMBOL -> "Schaltadresse (optional)"
                         tile.shape.addressCount == 2 -> "Adresse (links, rechts = +1)"
@@ -879,6 +904,10 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
             if (tile.shape.kind == TileKind.SIGNAL) {
                 Spacer(Modifier.size(8.dp))
                 AspectAddresses(tile)
+            }
+            if (hasAccessoryTabs(tile)) {
+                Spacer(Modifier.size(8.dp))
+                AccessoryTabs(tile, set)
             }
         }
     }

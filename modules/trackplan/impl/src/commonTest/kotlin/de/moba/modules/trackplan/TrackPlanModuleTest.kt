@@ -4,7 +4,10 @@ import de.moba.adapters.simulator.SimulatorStation
 import de.moba.core.model.InMemoryLayoutRepository
 import de.moba.core.runtime.LicenseInfo
 import de.moba.core.runtime.ModuleHost
+import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.LicenseRequiredException
+import de.moba.modules.trackplan.api.TableCommand
+import de.moba.modules.trackplan.api.isOn
 import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
 import de.moba.modules.trackplan.api.TrackPlanStore
@@ -12,6 +15,7 @@ import de.moba.modules.trackplan.api.TrackShape
 import de.moba.modules.trackplan.api.TrackTile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -139,5 +143,108 @@ class TrackPlanModuleTest {
         advanceUntilIdle()
         assertEquals(1, service.signalAspects.value[40])
         assertEquals(false, service.turnouts.value[40])
+    }
+
+    @Test
+    fun levelCrossingClosesAndOpensWithFeedback() = runTest {
+        val station = SimulatorStation()
+        val service = start(LicenseInfo.FREE, station = station)
+        val crossing = TrackTile(5, 5, TrackShape.LEVEL_CROSSING, address = 30)
+            .withProp(AccessoryProps.ON_FEEDBACK, "1.3, 1.4")
+            .withProp(AccessoryProps.OFF_FEEDBACK, "1.8")
+        service.update(service.plans.value.first().put(crossing))
+
+        station.simulateFeedback(1, 3, occupied = true)
+        advanceUntilIdle()
+        assertTrue(crossing.isOn(service.turnouts.value))
+        station.simulateFeedback(1, 3, occupied = false)
+        station.simulateFeedback(1, 8, occupied = true)
+        advanceUntilIdle()
+        assertTrue(crossing.isOn(service.turnouts.value), "erst oeffnen, wenn der Zug den Ausschalt-Melder verlassen hat")
+        station.simulateFeedback(1, 8, occupied = false)
+        advanceUntilIdle()
+        assertFalse(crossing.isOn(service.turnouts.value))
+
+        // Von Hand schalten
+        service.operate(crossing)
+        advanceUntilIdle()
+        assertTrue(crossing.isOn(service.turnouts.value))
+    }
+
+    @Test
+    fun relayPulseAndSoundFile() = runTest {
+        val station = SimulatorStation()
+        val service = start(LicenseInfo.FREE, station = station)
+        val relay = TrackTile(0, 0, TrackShape.RELAY, address = 7).withProp(AccessoryProps.PULSE, "300")
+        service.setOn(relay, true)
+        advanceUntilIdle()
+        assertEquals(false, service.turnouts.value[7], "nach dem Impuls wieder aus")
+
+        val played = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { service.sounds.collect { played += it } }
+        val sound = TrackTile(1, 0, TrackShape.SOUND).withProp(AccessoryProps.FILE, "pfiff.wav")
+            .withProp(AccessoryProps.ON_FEEDBACK, "2.1")
+        service.update(service.plans.value.first().put(sound))
+        service.operate(sound)
+        station.simulateFeedback(2, 1, occupied = true)
+        advanceUntilIdle()
+        assertEquals(listOf("pfiff.wav", "pfiff.wav"), played)
+    }
+
+    @Test
+    fun aspectAccessoryCyclesThroughItsAspects() = runTest {
+        val station = SimulatorStation()
+        val service = start(LicenseInfo.FREE, station = station)
+        val lamp = TrackTile(0, 0, TrackShape.ACCESSORY_ASPECT, address = 60)
+            .withProp(AccessoryProps.ASPECTS, "Aus|Blinken|Dauerlicht")
+        service.update(service.plans.value.first().put(lamp))
+        repeat(2) { service.operate(lamp) }
+        advanceUntilIdle()
+        assertEquals(2, service.signalAspects.value[60])
+        assertEquals(true, service.turnouts.value[61])
+        service.operate(lamp)
+        advanceUntilIdle()
+        assertEquals(0, service.signalAspects.value[60])
+    }
+
+    @Test
+    fun turntableTurnsStepsAndLocksWhenOccupied() = runTest {
+        val station = SimulatorStation()
+        val service = start(LicenseInfo.FREE, station = station)
+        val table = TrackTile(10, 10, TrackShape.TURNTABLE, address = 225)
+            .withProp(AccessoryProps.POSITIONS, "24")
+            .withProp(AccessoryProps.TRACKS, "0, 3, 6, 12")
+            .withProp(AccessoryProps.CMD_TURN, "241:r")
+            .withProp(AccessoryProps.READY_FEEDBACK, "4.1")
+            .withProp(AccessoryProps.BLOCK_FEEDBACK, "4.2")
+            .withProp(AccessoryProps.BLOCK_LOCK, "1")
+        service.update(service.plans.value.first().put(table))
+
+        service.turnTo(table, 3)
+        advanceUntilIdle()
+        assertEquals(false, service.turnouts.value[226])
+        assertEquals(3, service.tablePositions.value[225])
+        assertEquals(setOf(225), service.tablesMoving.value)
+        station.simulateFeedback(4, 1, occupied = true)
+        advanceUntilIdle()
+        assertEquals(emptySet(), service.tablesMoving.value)
+
+        service.tableCommand(table, TableCommand.STEP_CW)
+        advanceUntilIdle()
+        assertEquals(6, service.tablePositions.value[225])
+        assertEquals(true, service.turnouts.value[228])
+        service.tableCommand(table, TableCommand.TURN_180)
+        advanceUntilIdle()
+        assertEquals(true, service.turnouts.value[241])
+        assertEquals(18, service.tablePositions.value[225])
+
+        // Meldung einer Gleisadresse von aussen (z. B. Handregler)
+        station.setTurnout(225, thrown = true)
+        advanceUntilIdle()
+        assertEquals(0, service.tablePositions.value[225])
+
+        station.simulateFeedback(4, 2, occupied = true)
+        advanceUntilIdle()
+        assertFailsWith<IllegalStateException> { service.turnTo(table, 12) }
     }
 }

@@ -48,6 +48,7 @@ import de.moba.modules.driving.ui.DrivingUiState
 import de.moba.modules.trackplan.DemoPlans
 import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
+import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
 import de.moba.modules.trackplan.api.TrackPlanStore
@@ -109,6 +110,7 @@ import de.moba.ui.shell.MobaApp
 import de.moba.ui.shell.MobaShell
 import de.moba.ui.shell.ModuleWindowFrame
 import de.moba.ui.shell.ShellUiState
+import de.moba.ui.shell.SoundSupport
 import de.moba.ui.shell.TextSize
 import de.moba.ui.shell.WatermarkStrength
 import java.io.File
@@ -687,6 +689,115 @@ class ScreenshotTest {
         }
         TrackPlanWindows.reset()
         ShellUiState.separateWindows.value = false
+
+        // Zubehoer wie in iTrain: Drehscheibe, Schiebebuehne, Bahnuebergang, Relais, Licht, Sound, Zubehoer mit Bildern
+        pro.setDarkTheme(true)
+        val accessoryPlan = proPlansService.addPlan("Zubehör").resize(28, 16).let { start ->
+            var p = start
+            fun put(t: TrackTile) { p = p.put(t) }
+            (0..15).forEach { x -> put(TrackTile(x, 2, if (x == 5) TrackShape.LEVEL_CROSSING else TrackShape.STRAIGHT, 2, address = if (x == 5) 30 else null)) }
+            p = p.put(p.tileAt(5, 2)!!.withProp(AccessoryProps.NAME, "BÜ Dorfstraße").withProp(AccessoryProps.ON_FEEDBACK, "1.3, 1.4").withProp(AccessoryProps.OFF_FEEDBACK, "1.8"))
+            put(TrackTile(4, 1, TrackShape.TEXT, text = "BÜ Dorfstraße"))
+            (3..6).forEach { y -> put(TrackTile(8, y, TrackShape.STRAIGHT, 0)) }
+            listOf(12 to 6, 13 to 5).forEach { (x, y) -> put(TrackTile(x, y, TrackShape.STRAIGHT, 1)) }
+            listOf(4 to 6, 3 to 5).forEach { (x, y) -> put(TrackTile(x, y, TrackShape.STRAIGHT, 7)) }
+            (12..15).forEach { x -> put(TrackTile(x, 10, TrackShape.STRAIGHT, 2)) }
+            put(TrackTile(16, 10, TrackShape.BUFFER_STOP, 6))
+            (1..4).forEach { x -> put(TrackTile(x, 10, TrackShape.STRAIGHT, 2)) }
+            put(TrackTile(0, 10, TrackShape.BUFFER_STOP, 2))
+            put(TrackTile(8, 14, TrackShape.STRAIGHT, 0))
+            put(TrackTile(8, 15, TrackShape.BUFFER_STOP, 0))
+            put(
+                TrackTile(8, 10, TrackShape.TURNTABLE, address = 225)
+                    .withProp(AccessoryProps.NAME, "Drehscheibe Bw")
+                    .withProp(AccessoryProps.POSITIONS, "24")
+                    .withProp(AccessoryProps.TRACKS, "0, 3, 6, 12, 18, 21")
+                    .withProp(AccessoryProps.SIZE, "3")
+                    .withProp(AccessoryProps.CMD_TURN, "241:r")
+                    .withProp(AccessoryProps.CMD_STEP_CW, "242:g")
+                    .withProp(AccessoryProps.CMD_STEP_CCW, "242:r")
+                    .withProp(AccessoryProps.READY_FEEDBACK, "4.1")
+                    .withProp(AccessoryProps.BLOCK, "Bühne")
+                    .withProp(AccessoryProps.BLOCK_FEEDBACK, "4.2")
+                    .withProp(AccessoryProps.BLOCK_LOCK, "1"),
+            )
+            put(TrackTile(20, 4, TrackShape.TRANSFER_TABLE, address = 250).withProp(AccessoryProps.NAME, "Schiebebühne Lokschuppen")
+                .withProp(AccessoryProps.POSITIONS, "5").withProp(AccessoryProps.SIZE, "3").withProp(AccessoryProps.STEP_TIME, "1500"))
+            (4..8).forEach { y ->
+                (23..25).forEach { x -> put(TrackTile(x, y, TrackShape.STRAIGHT, 2)) }
+                put(TrackTile(26, y, TrackShape.BUFFER_STOP, 6))
+            }
+            listOf(4, 6, 8).forEach { y -> (17..19).forEach { x -> put(TrackTile(x, y, TrackShape.STRAIGHT, 2)) } }
+            put(TrackTile(18, 12, TrackShape.RELAY, address = 70).withProp(AccessoryProps.NAME, "Fahrstrom Bw"))
+            put(TrackTile(20, 12, TrackShape.LIGHT, address = 71).withProp(AccessoryProps.NAME, "Lampen Bw"))
+            put(TrackTile(22, 12, TrackShape.SOUND, address = 72).withProp(AccessoryProps.FILE, "pfiff.wav").withProp(AccessoryProps.ON_FEEDBACK, "2.1"))
+            put(TrackTile(24, 12, TrackShape.ACCESSORY_ASPECT, address = 80).withProp(AccessoryProps.ASPECTS, "Aus|Blinken|Dauerlicht|Nacht"))
+            listOf(18 to "Relais", 20 to "Licht", 22 to "Sound", 24 to "Bilder").forEach { (x, t) -> put(TrackTile(x - 1, 13, TrackShape.TEXT, text = t)) }
+            p
+        }
+        proPlansService.update(accessoryPlan)
+        val previousVisible = proPlansService.visiblePlans.value
+        proPlansService.visiblePlans.value.forEach { if (proPlansService.visiblePlans.value.size > 1) proPlansService.toggleVisible(it) }
+        proPlansService.toggleVisible(accessoryPlan.id)
+        proPlansService.visiblePlans.value.filter { it != accessoryPlan.id }.forEach { proPlansService.toggleVisible(it) }
+        val turntable = accessoryPlan.tileAt(8, 10)!!
+        proPlansService.turnTo(turntable, 6)
+        proSim.simulateFeedback(4, 1, occupied = true)
+        proPlansService.turnTo(accessoryPlan.tileAt(20, 4)!!, 2)
+        proPlansService.setOn(accessoryPlan.tileAt(5, 2)!!, true)
+        proPlansService.setOn(accessoryPlan.tileAt(20, 12)!!, true)
+        proPlansService.setAspect(accessoryPlan.tileAt(24, 12)!!, 1)
+        delay(200)
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        TrackPlanUiState.tileSize.value = 30
+        render("pc-gleisbild-zubehoer-betrieb-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.openTable.value = accessoryPlan.id to (8 to 10)
+        render("pc-gleisbild-drehscheibe-steuern-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        pro.setDarkTheme(false)
+        render("handy-gleisbild-drehscheibe-steuern-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.openTable.value = null
+        render("handy-gleisbild-zubehoer-betrieb-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        pro.setDarkTheme(true)
+        val demoSound = object : SoundSupport {
+            override val formats = "WAV, AIFF oder AU."
+            override fun pick(onResult: (String?) -> Unit) = onResult(null)
+            override fun play(name: String) = Unit
+        }
+        TrackPlanUiState.mode.value = TrackPlanMode.BEARBEITEN
+        TrackPlanUiState.editPlan.value = accessoryPlan.id
+        TrackPlanUiState.tool.value = EditTool.Select
+        for ((cell, tabs) in listOf((8 to 10) to listOf("allgemein", "decoder", "zubehoer", "rueckmelder", "block", "steuern"), (5 to 2) to listOf("allgemein", "decoder", "steuerung"), (22 to 12) to listOf("datei"))) {
+            TrackPlanUiState.selected.value = cell
+            tabs.forEachIndexed { i, tab ->
+                TrackPlanUiState.accessoryTab.value = i
+                val what = accessoryPlan.tileAt(cell.first, cell.second)!!.shape.name.lowercase().replace('_', '-')
+                render("pc-gleisbild-editor-$what-$tab-dunkel", 1440, 1100, 1f) {
+                    MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, sound = demoSound)
+                }
+            }
+        }
+        pro.setDarkTheme(false)
+        TrackPlanUiState.selected.value = 20 to 4
+        TrackPlanUiState.accessoryTab.value = 2
+        render("handy-gleisbild-editor-schiebebuehne-zubehoer-hell", 824, 2400, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId)
+        }
+        TrackPlanUiState.selected.value = null
+        TrackPlanUiState.accessoryTab.value = 0
+        TrackPlanUiState.editPlan.value = null
+        TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
+        TrackPlanUiState.tileSize.value = 24
+        proPlansService.toggleVisible(previousVisible.first())
+        proPlansService.toggleVisible(accessoryPlan.id)
+        proPlansService.removePlan(accessoryPlan.id)
 
         // Lizenz: erst kostenlos, dann mit einem Testschluessel (eigenes Schluesselpaar nur fuer diesen Test)
         app.setDarkTheme(true)

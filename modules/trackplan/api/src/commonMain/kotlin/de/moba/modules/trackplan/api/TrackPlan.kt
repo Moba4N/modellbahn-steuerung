@@ -20,8 +20,11 @@ data class TrackSegment(val from: Int, val to: Int, val branch: Branch = Branch.
 /** Welcher Weichenstellung ein Gleisstueck angehoert. */
 enum class Branch { MAIN, LEFT, RIGHT }
 
-/** Was eine Kachel ausser Gleis noch traegt. */
-enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT, SYMBOL }
+/**
+ * Was eine Kachel ausser Gleis noch traegt. Zubehoer wie in iTrain: [ASPECT] (Zubehoer mit mehreren Bildern),
+ * [RELAY], [LIGHT], [SOUND], [GATE] (Bahnuebergang), [TURNTABLE] und [TRANSFER] (Schiebebuehne).
+ */
+enum class TileKind { TRACK, TURNOUT, SIGNAL, FEEDBACK, UNCOUPLER, BUFFER, TEXT, SYMBOL, ASPECT, RELAY, LIGHT, SOUND, GATE, TURNTABLE, TRANSFER }
 
 /**
  * Alle Gleisformen des Gleisbilds. Die Segmente gelten fuer Drehung 0;
@@ -72,21 +75,46 @@ enum class TrackShape(val label: String, val kind: TileKind, val segments: List<
     UNCOUPLER("Entkuppler", TileKind.UNCOUPLER, listOf(TrackSegment(0, 4))),
     TEXT("Text", TileKind.TEXT, emptyList()),
     SYMBOL("Symbol", TileKind.SYMBOL, emptyList()),
+    ACCESSORY_ASPECT("Zubehör mit Bildern", TileKind.ASPECT, emptyList()),
+    RELAY("Relais", TileKind.RELAY, emptyList()),
+    LIGHT("Licht", TileKind.LIGHT, emptyList()),
+    SOUND("Sound", TileKind.SOUND, emptyList()),
+    LEVEL_CROSSING("Bahnübergang", TileKind.GATE, listOf(TrackSegment(0, 4))),
+    TURNTABLE("Drehscheibe", TileKind.TURNTABLE, emptyList()),
+    TRANSFER_TABLE("Schiebebühne", TileKind.TRANSFER, emptyList()),
     ;
 
-    /** Braucht eine Digitaladresse (Weichen, Signale, Entkuppler); bei Symbolen schaltet sie den Zustand. */
-    val hasAddress: Boolean get() = kind == TileKind.TURNOUT || kind == TileKind.SIGNAL || kind == TileKind.UNCOUPLER || kind == TileKind.SYMBOL
+    /**
+     * Braucht eine Digitaladresse (Weichen, Signale, Entkuppler, Zubehoer); bei Symbolen schaltet sie den Zustand.
+     * Beim Sound ist sie freiwillig, er spielt auch ohne Zentrale.
+     */
+    val hasAddress: Boolean get() = kind in ADDRESSED
+
+    /** Zubehoer, das sich ein- und ausschalten laesst und dafuer Einschalt- und Ausschalt-Melder kennt. */
+    val switchable: Boolean get() = kind in SWITCHABLE
+
+    /** Drehscheibe oder Schiebebuehne: Buehne mit Gleisanschluessen, gesteuert ueber [TableConfig]. */
+    val isTable: Boolean get() = kind == TileKind.TURNTABLE || kind == TileKind.TRANSFER
 
     /** Dreiwegweichen brauchen zwei Adressen: [address] fuer links, [address] + 1 fuer rechts. */
     val addressCount: Int get() = if (this == TURNOUT_THREE_WAY) 2 else 1
 
     fun segments(rotation: Int) = segments.map { it.rotated(rotation) }
+
+    private companion object {
+        val SWITCHABLE = setOf(TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.GATE)
+        val ADDRESSED = setOf(
+            TileKind.TURNOUT, TileKind.SIGNAL, TileKind.UNCOUPLER, TileKind.SYMBOL, TileKind.ASPECT,
+            TileKind.RELAY, TileKind.LIGHT, TileKind.SOUND, TileKind.GATE, TileKind.TURNTABLE, TileKind.TRANSFER,
+        )
+    }
 }
 
 /**
  * Eine belegte Rasterzelle. [rotation] in 45-Grad-Schritten (0 bis 7).
  * [feedbackModule]/[feedbackContact] verbinden einen Rueckmelder mit s88-Modul und Kontakt.
  * [symbol] verweist auf ein eigenes Symbol (Kennung) oder bei Signalen auf ein Signalsystem ("signal:<kennung>").
+ * [props] haelt die Zubehoer-Einstellungen aus den Reitern (Name, Bilder, Melder, Drehscheibe usw.), siehe [AccessoryProps].
  */
 data class TrackTile(
     val x: Int,
@@ -98,8 +126,28 @@ data class TrackTile(
     val feedbackContact: Int? = null,
     val text: String = "",
     val symbol: String = "",
+    val props: Map<String, String> = emptyMap(),
 ) {
     fun segments() = shape.segments(rotation)
+
+    fun prop(key: String): String = props[key].orEmpty()
+
+    /** Setzt eine Einstellung; ein leerer Wert entfernt sie. */
+    fun withProp(key: String, value: String): TrackTile = copy(props = if (value.isEmpty()) props - key else props + (key to value))
+
+    /** Zellen, die die Kachel bedeckt; Drehscheiben und Schiebebuehnen sind groesser als eine Zelle. */
+    fun footprint(): Footprint = when (shape.kind) {
+        TileKind.TURNTABLE -> TableConfig.of(this).radius.let { r -> Footprint(x - r, y - r, 2 * r + 1, 2 * r + 1) }
+        TileKind.TRANSFER -> TableConfig.of(this).let { c ->
+            if (c.vertical) Footprint(x, y, c.positions, c.length) else Footprint(x, y, c.length, c.positions)
+        }
+        else -> Footprint(x, y, 1, 1)
+    }
+}
+
+/** Rechteck aus Rasterzellen. */
+data class Footprint(val x: Int, val y: Int, val width: Int, val height: Int) {
+    operator fun contains(cell: Pair<Int, Int>) = cell.first in x until x + width && cell.second in y until y + height
 }
 
 /** Ein Gleisbild: Name, Rastergroesse und Kacheln. */
@@ -111,6 +159,9 @@ data class TrackPlan(
     val tiles: List<TrackTile> = emptyList(),
 ) {
     fun tileAt(x: Int, y: Int): TrackTile? = tiles.firstOrNull { it.x == x && it.y == y }
+
+    /** Kachel an der Zelle oder, wenn dort keine liegt, eine Drehscheibe/Schiebebuehne, die die Zelle bedeckt. */
+    fun objectAt(x: Int, y: Int): TrackTile? = tileAt(x, y) ?: tiles.lastOrNull { it.shape.isTable && (x to y) in it.footprint() }
 
     /** Setzt oder ersetzt die Kachel an ihrer Position. Ausserhalb des Rasters passiert nichts. */
     fun put(tile: TrackTile): TrackPlan {
