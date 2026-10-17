@@ -20,6 +20,8 @@ class VehicleCodecTest {
                 WagonClass("gw-1", VehicleGroup.FREIGHT, "Eaos", "Hochbordwagen", WagonCategory.OPEN, "DB", Epoch.IV, 162, 6),
                 WagonClass("pw-1", VehicleGroup.PASSENGER, "Bm 235", category = WagonCategory.SECOND, count = 4),
             ),
+            categories = listOf(TrainCategory("zg-1", "RE", "Regional-Express", maxSpeed = 160), TrainCategory("zg-2", "Gag", passenger = false)),
+            trains = listOf(TrainSet("zug-1", "RE 4711", "zg-1", listOf("lok-1"), listOf("pw-1", "pw-1")), TrainSet("zug-2", "Leer")),
         )
         assertEquals(fleet, VehicleCodec.decode(VehicleCodec.encode(fleet)))
     }

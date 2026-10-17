@@ -33,6 +33,8 @@ internal data class World(
     val runningAutomations: Set<String> = emptySet(),
     val fleet: Fleet = Fleet(),
     val fuel: Map<Int, Double> = emptyMap(),
+    /** Booster nach Id und Name (klein geschrieben): an oder aus. */
+    val boosters: Map<String, Boolean> = emptyMap(),
 ) {
     fun speed(address: Int) = locos[address]?.speed ?: 0
     fun record(address: Int): LocoRecord? = fleet.locos.firstOrNull { it.address == address }
@@ -87,7 +89,11 @@ internal object Conditions {
                 thrown == (c.param("stellung") == "abzweigend")
             }
             ConditionType.ACCESSORY_RESERVED -> (c.int("adresse") ?: return false) in w.reservedAddresses
-            ConditionType.BOOSTER -> w.trackPower == (c.param("zustand") == "an")
+            ConditionType.BOOSTER -> {
+                val name = c.param("booster").trim().lowercase()
+                val on = w.trackPower && (name.isEmpty() || (w.boosters[name] ?: return false))
+                on == (c.param("zustand") == "an")
+            }
             ConditionType.BLOCK_FREE -> block(c)?.let { free(it, w) } ?: false
             ConditionType.BLOCK_OCCUPIED -> block(c)?.let { it in w.feedback } ?: false
             ConditionType.BLOCK_STATE -> {
@@ -149,7 +155,8 @@ internal object Conditions {
             }
             ConditionType.WAGON -> {
                 val record = w.record(trainIn() ?: return false) ?: return false
-                record.consist.any { id -> w.fleet.wagons.firstOrNull { it.id == id }?.category?.name == c.param("bauart") }
+                val wagons = record.consist + w.fleet.trains.filter { record.id in it.locos }.flatMap { it.wagons }
+                wagons.any { id -> w.fleet.wagons.firstOrNull { it.id == id }?.category?.name == c.param("bauart") }
             }
             ConditionType.FUEL -> {
                 val loco = c.int("lok") ?: return false

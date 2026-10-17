@@ -34,6 +34,7 @@ import de.moba.modules.actions.api.ACTIONS_MODULE_ID
 import de.moba.modules.actions.api.ActionService
 import de.moba.ui.shell.Moba
 import de.moba.ui.shell.MobaApp
+import de.moba.ui.shell.ModuleEditor
 import de.moba.ui.shell.ModuleMenu
 import de.moba.ui.shell.StatusDot
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,3 +138,21 @@ object ActionsMenu : ModuleMenu {
 internal fun Gap(width: Int = 8) = Spacer(Modifier.width(width.dp))
 
 internal val rowSpacing = Arrangement.spacedBy(8.dp)
+
+/** Bearbeiten > Aktionen: dieselbe Liste und derselbe Editor wie im Menue "Aktionen". */
+object ActionsEditor : ModuleEditor {
+    override val moduleId = ACTIONS_MODULE_ID
+    override val key = "aktionen"
+    override val title = "Aktionen"
+    override val icon = Icons.Outlined.Bolt
+    override val order = 90
+
+    private val window = MutableStateFlow(ActionsWindow())
+
+    @Composable
+    override fun Content(app: MobaApp) {
+        val service = rememberActionService(app) ?: return
+        val current by window.collectAsState()
+        RulesTab(app, service, current) { window.value = it }
+    }
+}

@@ -16,6 +16,7 @@ import de.moba.modules.decoder.ui.DecoderScreen
 import de.moba.modules.driving.DrivingModule
 import de.moba.modules.driving.ui.DrivingPanel
 import de.moba.modules.driving.ui.DrivingScreen
+import de.moba.modules.trackplan.FileLayoutObjectStore
 import de.moba.modules.trackplan.FileTrackPlanStore
 import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
@@ -46,7 +47,11 @@ import de.moba.modules.routes.RouteModule
 import de.moba.modules.routes.RouteRepository
 import de.moba.modules.routes.ui.RoutesScreen
 import de.moba.modules.monitor.ui.MonitorTool
+import de.moba.modules.actions.ui.ActionsEditor
 import de.moba.modules.actions.ui.ActionsMenu
+import de.moba.modules.routes.ui.RouteEditors
+import de.moba.modules.trackplan.ui.TrackObjectEditors
+import de.moba.modules.vehicles.ui.VehicleEditors
 import de.moba.modules.throttles.FileThrottleBarStore
 import de.moba.modules.throttles.ThrottleBarModule
 import de.moba.modules.throttles.ThrottleBarRepository
@@ -85,7 +90,7 @@ private val layoutFiles = FolderLayoutFiles(dataDir, DesktopSettings::get, Deskt
 
 /** Die Daten der offenen Anlage; bleiben ueber Neustarts der Module (z. B. Zentralenwechsel) erhalten. */
 private class LayoutData(dir: File) {
-    val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dir, "gleisbilder.txt")))
+    val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dir, "gleisbilder.txt")), FileLayoutObjectStore(File(dir, "anlagenobjekte.txt")))
     val vehicles = VehicleRepository(FileVehicleStore(File(dir, "fahrzeuge.txt")))
     val symbols = SymbolRepository(FileSymbolStore(File(dir, "symbole.txt")))
     val decoders = DecoderRepository(FileDecoderStore(File(dir, "decoder.txt")))
@@ -210,6 +215,7 @@ fun main() = application {
             effects = listOf(TrackPlanSounds, TrackPlanTrains),
             files = files,
             menus = listOf(ActionsMenu),
+            editors = VehicleEditors + RouteEditors + TrackObjectEditors + ActionsEditor,
         )
     }
     // Gleisbilder in eigenen Fenstern (Pro), z. B. auf einem zweiten und dritten Bildschirm

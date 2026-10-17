@@ -195,6 +195,8 @@ internal class ActionServiceImpl(
         val runningAutomations = routes?.automation?.value.orEmpty().filterValues { it.running }.keys
         val allLocos = r.locos + driving?.locos?.value.orEmpty()
         val trains = plan?.trains?.value.orEmpty()
+        val feedbackNow = r.feedback + plan?.occupied?.value.orEmpty()
+        val turnoutsNow = r.turnouts + plan?.turnouts?.value.orEmpty()
         // Wartezeit im Block: ab dem ersten Augenblick, in dem die Lok dort mit Fahrstufe 0 steht
         val standing = trains.values.filter { (allLocos[it]?.speed ?: 0) == 0 }.toSet()
         stoppedSince.keys.retainAll(standing)
@@ -205,8 +207,8 @@ internal class ActionServiceImpl(
             wallMinutes = wallMinutes(),
             connected = r.connected,
             trackPower = r.trackPower,
-            feedback = r.feedback + plan?.occupied?.value.orEmpty(),
-            turnouts = r.turnouts + plan?.turnouts?.value.orEmpty(),
+            feedback = feedbackNow,
+            turnouts = turnoutsNow,
             reservedAddresses = book?.routes.orEmpty().filter { it.id in active }.flatMap { r -> r.settings.map { it.address } }.toSet(),
             reservedBlocks = plan?.reservations?.value.orEmpty().keys,
             trains = trains,
@@ -219,6 +221,10 @@ internal class ActionServiceImpl(
             runningAutomations = runningAutomations,
             fleet = services.vehicles()?.fleet?.value ?: Fleet(),
             fuel = repository.book.value.fuel,
+            boosters = plan?.objects?.value?.boosters.orEmpty().flatMap { b ->
+                val on = b.isOn(feedbackNow, turnoutsNow)
+                listOf(b.id to on, b.name.trim().lowercase() to on)
+            }.toMap(),
         )
     }
 

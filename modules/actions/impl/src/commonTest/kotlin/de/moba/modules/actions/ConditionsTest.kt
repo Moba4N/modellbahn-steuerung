@@ -23,6 +23,7 @@ class ConditionsTest {
         locos = mapOf(7 to LocoState(7, 30, Direction.REVERSE, setOf(0, 2)), 8 to LocoState(8)),
         automatedLocos = setOf(7),
         runningAutomations = setOf("zr-1"),
+        boosters = mapOf("bo-1" to true, "nord" to true, "bo-2" to false, "süd" to false),
     )
 
     private fun ok(type: ConditionType, vararg p: Pair<String, String>) = Conditions.eval(Condition.of(type, *p), world)
@@ -42,6 +43,9 @@ class ConditionsTest {
         assertTrue(ok(ConditionType.ACCESSORY_RESERVED, "adresse" to "3"))
         assertFalse(ok(ConditionType.ACCESSORY_RESERVED, "adresse" to "4"))
         assertTrue(ok(ConditionType.BOOSTER, "zustand" to "an"))
+        assertTrue(ok(ConditionType.BOOSTER, "zustand" to "an", "booster" to "Nord"))
+        assertTrue(ok(ConditionType.BOOSTER, "zustand" to "aus", "booster" to "bo-2"))
+        assertFalse(ok(ConditionType.BOOSTER, "zustand" to "an", "booster" to "Unbekannt"))
     }
 
     @Test

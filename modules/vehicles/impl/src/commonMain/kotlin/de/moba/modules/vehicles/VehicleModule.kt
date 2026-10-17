@@ -12,6 +12,8 @@ import de.moba.modules.vehicles.api.LocoRecord
 import de.moba.modules.vehicles.api.VEHICLES_MODULE_ID
 import de.moba.modules.vehicles.api.VehicleGroup
 import de.moba.modules.vehicles.api.VehicleLimitException
+import de.moba.modules.vehicles.api.TrainCategory
+import de.moba.modules.vehicles.api.TrainSet
 import de.moba.modules.vehicles.api.VehicleService
 import de.moba.modules.vehicles.api.VehicleStore
 import de.moba.modules.vehicles.api.WagonClass
@@ -141,6 +143,40 @@ internal class VehicleServiceImpl(
     override fun setImage(id: String, bytes: ByteArray?) {
         require(bytes == null || bytes.size <= VehicleService.MAX_IMAGE_BYTES) { "Das Bild ist zu groß (höchstens 8 MB)." }
         repository.setImage(id, bytes)
+    }
+
+    override fun saveCategory(category: TrainCategory): TrainCategory {
+        require(category.code.isNotBlank()) { "Bitte ein Kürzel eingeben, z. B. RE." }
+        repository.change { f ->
+            val exists = f.categories.any { it.id == category.id }
+            f.copy(categories = if (exists) f.categories.map { if (it.id == category.id) category else it } else f.categories + category)
+        }
+        return category
+    }
+
+    override fun deleteCategory(id: String) = repository.change { f ->
+        f.copy(
+            categories = f.categories.filterNot { it.id == id },
+            trains = f.trains.map { if (it.categoryId == id) it.copy(categoryId = "") else it },
+        )
+    }
+
+    override fun saveTrain(train: TrainSet): TrainSet {
+        require(train.name.isNotBlank()) { "Bitte einen Namen eingeben." }
+        repository.change { f ->
+            // Eine Lok faehrt nur in einem Zug: aus anderen Zuegen herausnehmen
+            val others = f.trains.filter { it.id != train.id }.map { t -> t.copy(locos = t.locos - train.locos.toSet()) }
+            val exists = f.trains.any { it.id == train.id }
+            f.copy(trains = if (exists) f.trains.map { t -> if (t.id == train.id) train else others.first { it.id == t.id } } else others + train)
+        }
+        return train
+    }
+
+    override fun deleteTrain(id: String) = repository.change { f -> f.copy(trains = f.trains.filterNot { it.id == id }) }
+
+    override fun newObjectId(prefix: String): String {
+        val used = fleet.value.categories.map { it.id } + fleet.value.trains.map { it.id }
+        return generateSequence(1) { it + 1 }.map { "$prefix$it" }.first { it !in used }
     }
 
     override fun newId(group: VehicleGroup): String {

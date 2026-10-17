@@ -106,7 +106,7 @@ internal fun ActionsDialog(app: MobaApp, service: ActionService, window: Actions
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (window.tab) {
-                        ActionsTab.RULES -> RulesTab(app, service, window)
+                        ActionsTab.RULES -> RulesTab(app, service, window) { ActionsUiState.window.value = it }
                         ActionsTab.FUEL -> FuelTab(app, service)
                         ActionsTab.LOG -> LogTab(service)
                     }
@@ -119,11 +119,11 @@ internal fun ActionsDialog(app: MobaApp, service: ActionService, window: Actions
 // ---------------------------------------------------------------- Aktionen
 
 @Composable
-private fun RulesTab(app: MobaApp, service: ActionService, window: ActionsWindow) {
+internal fun RulesTab(app: MobaApp, service: ActionService, window: ActionsWindow, navigate: (ActionsWindow) -> Unit) {
     val book by service.book.collectAsState()
     val satisfied by service.satisfied.collectAsState()
     fun select(id: String?, new: Boolean = false) {
-        ActionsUiState.window.value = window.copy(ruleId = id, newRule = new)
+        navigate(window.copy(ruleId = id, newRule = new))
     }
     val selected = book.rules.firstOrNull { it.id == window.ruleId }
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -172,7 +172,7 @@ private fun RulesTab(app: MobaApp, service: ActionService, window: ActionsWindow
             if (editing) {
                 val draft = selected ?: ActionRule(service.newId(), "", condition = Condition.and())
                 key(draft.id, window.newRule) {
-                    RuleEditor(app, service, draft, isNew = selected == null, satisfied = draft.id in satisfied, back = if (wide) null else ({ select(null) }))
+                    RuleEditor(app, service, draft, isNew = selected == null, satisfied = draft.id in satisfied, back = if (wide) null else ({ select(null) }), navigate = navigate)
                 }
             } else if (wide) {
                 Text("Links eine Aktion wählen oder eine neue anlegen.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -182,7 +182,15 @@ private fun RulesTab(app: MobaApp, service: ActionService, window: ActionsWindow
 }
 
 @Composable
-private fun RuleEditor(app: MobaApp, service: ActionService, initial: ActionRule, isNew: Boolean, satisfied: Boolean, back: (() -> Unit)?) {
+private fun RuleEditor(
+    app: MobaApp,
+    service: ActionService,
+    initial: ActionRule,
+    isNew: Boolean,
+    satisfied: Boolean,
+    back: (() -> Unit)?,
+    navigate: (ActionsWindow) -> Unit,
+) {
     var rule by remember { mutableStateOf(initial) }
     var message by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -223,7 +231,7 @@ private fun RuleEditor(app: MobaApp, service: ActionService, initial: ActionRule
             Button(onClick = {
                 service.save(rule.copy(name = rule.name.trim().ifEmpty { "Aktion ${rule.id.removePrefix("ak-")}" }))
                 message = null
-                ActionsUiState.window.value = ActionsWindow(ruleId = rule.id)
+                navigate(ActionsWindow(ruleId = rule.id))
             }) { Text("Speichern") }
             OutlinedButton(
                 onClick = { message = runCatching { service.run(rule.id) }.exceptionOrNull()?.message },
@@ -236,7 +244,7 @@ private fun RuleEditor(app: MobaApp, service: ActionService, initial: ActionRule
             if (!isNew) {
                 TextButton(onClick = {
                     service.delete(rule.id)
-                    ActionsUiState.window.value = ActionsWindow()
+                    navigate(ActionsWindow())
                 }) {
                     Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp))
                     Gap(6)

@@ -51,7 +51,9 @@ import de.moba.modules.trackplan.TrackPlanRepository
 import de.moba.modules.trackplan.api.AccessoryProps
 import de.moba.modules.trackplan.api.BlockReservation
 import de.moba.modules.trackplan.api.TrackPlan
+import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackPlanService
+import de.moba.modules.trackplan.api.block
 import de.moba.modules.trackplan.api.TrackPlanStore
 import de.moba.modules.trackplan.api.TrackShape
 import de.moba.modules.trackplan.api.TrackTile
@@ -74,6 +76,15 @@ import de.moba.modules.actions.api.Command
 import de.moba.modules.actions.api.CommandType
 import de.moba.modules.actions.api.Condition
 import de.moba.modules.actions.api.ConditionType
+import de.moba.modules.actions.ui.ActionsEditor
+import de.moba.modules.routes.ui.RouteEditors
+import de.moba.modules.trackplan.api.BoosterDef
+import de.moba.modules.trackplan.api.StationDef
+import de.moba.modules.trackplan.ui.TrackObjectEditors
+import de.moba.modules.vehicles.api.TrainCategory
+import de.moba.modules.vehicles.api.TrainSet
+import de.moba.modules.vehicles.ui.VehicleEditors
+import de.moba.ui.shell.EditUiState
 import de.moba.modules.actions.ui.ActionsMenu
 import de.moba.modules.actions.ui.ActionsTab
 import de.moba.modules.actions.ui.ActionsUiState
@@ -1087,6 +1098,54 @@ class ScreenshotTest {
             MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = VehiclesScreen.moduleId, menus = listOf(ActionsMenu))
         }
         VehiclesUiState.draft.value = null
+
+        // Menue "Bearbeiten": alle Objektlisten ohne Gleisbild, mit Zuggattungen, Zuegen, Bahnhoefen und Boostern
+        val allEditors = VehicleEditors + RouteEditors + TrackObjectEditors + ActionsEditor
+        listOf(
+            TrainCategory("zg-1", "RE", "Regional-Express", maxSpeed = 160),
+            TrainCategory("zg-2", "IC", "Intercity", maxSpeed = 200),
+            TrainCategory("zg-3", "Gag", "Ganzzug", passenger = false, maxSpeed = 100),
+        ).forEach { proVehicles.saveCategory(it) }
+        proVehicles.saveTrain(TrainSet("zug-1", "Nahgüterzug 61234", "zg-3", listOf("fz-lok-5"), listOf("fz-gw-1", "fz-gw-2", "fz-gw-3")))
+        proVehicles.saveTrain(TrainSet("zug-2", "Kesselzug 47110", "zg-3", listOf("fz-lok-50"), List(6) { "fz-gw-4" }))
+        val editPlans = pro.session.value!!.host.service(TrackPlanService::class)!!
+        val editBlocks = editPlans.plans.value.flatMap { p -> p.tiles.mapNotNull { it.block() } }.distinct()
+        editPlans.saveStation(StationDef("bf-1", "Neustadt", "NS", editBlocks.take(3)))
+        editPlans.saveStation(StationDef("bf-2", "Schattenbahnhof", "SBF", editBlocks.drop(3).take(2)))
+        editPlans.saveBooster(BoosterDef("bo-1", "Booster Nord", 90, 4 to 16, editBlocks.take(4)))
+        editPlans.saveBooster(BoosterDef("bo-2", "Booster Süd", null, 4 to 15, editBlocks.drop(4)))
+        pro.setDarkTheme(true)
+        EditUiState.menuOpen.value = true
+        render("pc-bearbeiten-menue-dunkel", 1440, 900, 1f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu), editors = allEditors)
+        }
+        EditUiState.menuOpen.value = false
+        val firstBlock = editPlans.plans.value.first { p -> p.tiles.any { it.block() != null } }.let { p ->
+            val t = p.tiles.filter { it.block() != null }.sortedWith(compareBy({ it.y }, { it.x })).first()
+            "${p.id}/${t.x},${t.y}"
+        }
+        val firstTurnout = editPlans.plans.value.first().let { p ->
+            val t = p.tiles.filter { it.shape.kind == TileKind.TURNOUT }.sortedWith(compareBy({ it.y }, { it.x })).first()
+            "${p.id}/${t.x},${t.y}"
+        }
+        EditUiState.selection.value = mapOf("zuege" to "zug-2", "bloecke" to firstBlock, "booster" to "bo-1", "bahnhoefe" to "bf-1", "zubehoer" to firstTurnout)
+        for ((key, name) in listOf(
+            "zuege" to "pc-bearbeiten-zuege-hell", "bloecke" to "pc-bearbeiten-bloecke-dunkel", "booster" to "pc-bearbeiten-booster-hell",
+            "zubehoer" to "pc-bearbeiten-zubehoer-dunkel", "zuggattungen" to "pc-bearbeiten-zuggattungen-hell",
+        )) {
+            pro.setDarkTheme(name.endsWith("dunkel"))
+            EditUiState.open.value = key
+            render(name, 1440, 900, 1f) {
+                MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu), editors = allEditors)
+            }
+        }
+        pro.setDarkTheme(false)
+        EditUiState.open.value = "bahnhoefe"
+        render("handy-bearbeiten-bahnhoefe-hell", 824, 1780, 2f) {
+            MobaShell(pro, withRoutes, listOf(DrivingPanel), initialScreen = TrackPlanScreen.moduleId, files = fileSupport, menus = listOf(ActionsMenu), editors = allEditors)
+        }
+        EditUiState.open.value = null
+        EditUiState.selection.value = emptyMap()
         proSim.setLocoSpeed(50, 0, Direction.FORWARD)
         fileRoot.deleteRecursively()
 

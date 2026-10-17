@@ -125,7 +125,7 @@ class FileMenuTest {
         onNodeWithText("Drucken …").assertExists()
 
         FileUiState.dialog.value = FileDialogKind.EXPORT
-        onNodeWithText("Gleisbilder").assertExists()
+        onNodeWithText("Gleisbilder, Bahnhöfe und Booster").assertExists()
         onNodeWithText("Exportieren …").assertIsEnabled()
     }
 }

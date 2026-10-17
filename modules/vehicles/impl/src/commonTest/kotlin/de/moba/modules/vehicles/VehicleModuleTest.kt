@@ -8,6 +8,8 @@ import de.moba.core.runtime.LicenseInfo
 import de.moba.core.runtime.ModuleHost
 import de.moba.modules.vehicles.api.Fleet
 import de.moba.modules.vehicles.api.LocoRecord
+import de.moba.modules.vehicles.api.TrainCategory
+import de.moba.modules.vehicles.api.TrainSet
 import de.moba.modules.vehicles.api.VehicleGroup
 import de.moba.modules.vehicles.api.VehicleLimitException
 import de.moba.modules.vehicles.api.VehicleService
@@ -138,5 +140,24 @@ class VehicleModuleTest {
         assertFailsWith<IllegalArgumentException> { service.setImage(loco.id, ByteArray(VehicleService.MAX_IMAGE_BYTES + 1)) }
         service.deleteLoco(loco.id)
         assertNull(service.image(loco.id))
+    }
+
+    @Test
+    fun trainsAndCategoriesAreFreeAndALocoRunsInOneTrain() = runTest {
+        val store = MemoryStore()
+        val service = start(LicenseInfo.FREE, store)
+        val loco = service.addLoco("BR 218", 3)
+        val wagon = service.addWagon(VehicleGroup.PASSENGER, "Bnrz")
+        val re = service.saveCategory(TrainCategory(service.newObjectId("zg-"), "RE", "Regional-Express"))
+        assertEquals("zg-2", service.newObjectId("zg-"))
+        service.saveTrain(TrainSet("zug-1", "RE 1", re.id, listOf(loco.id), listOf(wagon.id, wagon.id)))
+        service.saveTrain(TrainSet("zug-2", "RE 2", re.id, listOf(loco.id)))
+        assertEquals(emptyList(), service.fleet.value.trains.first { it.id == "zug-1" }.locos)
+        assertEquals("zug-2", service.fleet.value.trainOf(3)?.id)
+        service.deleteCategory(re.id)
+        assertTrue(store.saved!!.trains.all { it.categoryId.isEmpty() })
+        service.deleteTrain("zug-1")
+        assertEquals(listOf("zug-2"), store.saved!!.trains.map { it.id })
+        assertFailsWith<IllegalArgumentException> { service.saveCategory(TrainCategory("zg-9", " ")) }
     }
 }

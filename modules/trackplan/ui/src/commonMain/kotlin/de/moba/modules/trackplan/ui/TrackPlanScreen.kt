@@ -1020,6 +1020,16 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                 )
                 return@Column
             }
+            TileFields(service, plan, tile) { TrackPlanUiState.selected.value = null }
+        }
+    }
+}
+
+/** Alle Einstellungen einer Kachel; auch fuer das Menue "Bearbeiten" (Rueckmelder, Zubehoer, Bloecke). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun TileFields(service: TrackPlanService, plan: TrackPlan, tile: TrackTile, onRemoved: () -> Unit) {
+    Column {
             val set = { t: TrackTile -> service.change(plan.id) { it.put(t) } }
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1088,7 +1098,7 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                 }
                 FilledTonalButton(onClick = {
                     service.change(plan.id) { it.remove(tile.x, tile.y) }
-                    TrackPlanUiState.selected.value = null
+                    onRemoved()
                 }) {
                     Icon(Icons.Outlined.Delete, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -1107,7 +1117,6 @@ private fun TileProperties(service: TrackPlanService, plan: TrackPlan) {
                 Spacer(Modifier.size(8.dp))
                 AccessoryTabs(tile, set)
             }
-        }
     }
 }
 

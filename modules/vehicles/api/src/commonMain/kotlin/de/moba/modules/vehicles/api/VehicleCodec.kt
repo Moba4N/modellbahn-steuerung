@@ -11,6 +11,8 @@ import de.moba.core.model.LocoDynamics
  * fn     <lok-id> <nummer> <name>
  * fahr   <lok-id> <fuehrerstand 0/1> <traegheit 0/1> <anfahren s> <bremsen s> <zeitraum ms> <offset mm> <reaktion ms>
  * wagen  <id> <gruppe> <gattung> <name> <bauart> <bahn> <epoche> <laenge> <anzahl> <hersteller> <art.-nr.> <notiz>
+ * zg     <id> <kuerzel> <name> <p = Personen, g = Gueter> <vmax>
+ * zug    <id> <name> <zuggattung-id> <lok-ids mit Komma> <wagen-ids mit Komma>
  * ```
  * Leere Felder stehen fuer "nicht gesetzt". Unbekannte Zeilen und Werte werden beim Lesen uebersprungen.
  */
@@ -39,6 +41,8 @@ object VehicleCodec {
                 w.count, w.manufacturer, w.articleNumber, w.notes,
             )
         }
+        for (c in fleet.categories) line("zg", c.id, c.code, c.name, if (c.passenger) "p" else "g", c.maxSpeed)
+        for (t in fleet.trains) line("zug", t.id, t.name, t.categoryId, t.locos.joinToString(","), t.wagons.joinToString(","))
     }
 
     private fun StringBuilder.line(vararg fields: Any?) {
@@ -50,6 +54,8 @@ object VehicleCodec {
         require(lines.firstOrNull()?.trim() == HEADER) { "Keine Fahrzeug-Datei" }
         val locos = mutableListOf<LocoRecord>()
         val wagons = mutableListOf<WagonClass>()
+        val categories = mutableListOf<TrainCategory>()
+        val trains = mutableListOf<TrainSet>()
         for (line in lines.drop(1)) {
             if (line.isBlank()) continue
             val f = line.split('\t').map(::unescape)
@@ -71,7 +77,7 @@ object VehicleCodec {
                         lengthMm = at(12).toIntOrNull(),
                         notes = at(13),
                         gauge = Gauge.entries.firstOrNull { it.name == at(14) },
-                        consist = at(15).split(',').filter { it.isNotBlank() },
+                        consist = list(at(15)),
                     )
                     "fn" -> {
                         val i = locos.indexOfFirst { it.id == at(1) }
@@ -108,11 +114,15 @@ object VehicleCodec {
                         articleNumber = at(11),
                         notes = at(12),
                     )
+                    "zg" -> categories += TrainCategory(at(1).ifEmpty { error("ohne Id") }, at(2), at(3), at(4) != "g", at(5).toIntOrNull())
+                    "zug" -> trains += TrainSet(at(1).ifEmpty { error("ohne Id") }, at(2), at(3), list(at(4)), list(at(5)))
                 }
             }
         }
-        return Fleet(locos, wagons)
+        return Fleet(locos, wagons, categories, trains)
     }
+
+    private fun list(s: String) = s.split(',').filter { it.isNotBlank() }
 
     private fun escape(s: String) = s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
 

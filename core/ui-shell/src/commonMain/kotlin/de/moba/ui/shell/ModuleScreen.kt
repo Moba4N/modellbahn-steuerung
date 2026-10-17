@@ -91,3 +91,22 @@ interface ModuleMenu {
     @Composable
     fun Dialogs(app: MobaApp)
 }
+
+/**
+ * Ein Eintrag im Menue "Bearbeiten": eine Liste von Objekten mit Editor (z. B. Lokomotiven, Bloecke),
+ * erreichbar ohne den passenden Reiter oder das Gleisbild zu oeffnen.
+ */
+interface ModuleEditor {
+    val moduleId: String
+
+    /** Eindeutig ueber alle Module, z. B. "lokomotiven". */
+    val key: String
+    val title: String
+    val icon: ImageVector
+
+    /** Platz im Menue; kleiner steht weiter oben. */
+    val order: Int
+
+    @Composable
+    fun Content(app: MobaApp)
+}

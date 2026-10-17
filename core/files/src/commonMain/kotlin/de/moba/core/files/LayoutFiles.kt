@@ -7,7 +7,7 @@ data class LayoutInfo(val path: String, val name: String)
 
 /** Teil der Anlagendaten, der sich einzeln exportieren und importieren laesst. */
 enum class DataPart(val label: String, val files: List<String>, val folders: List<String> = emptyList()) {
-    TRACK_PLANS("Gleisbilder", listOf("gleisbilder.txt")),
+    TRACK_PLANS("Gleisbilder, Bahnhöfe und Booster", listOf("gleisbilder.txt", "anlagenobjekte.txt")),
     VEHICLES("Fahrzeuge mit Fotos", listOf("fahrzeuge.txt"), listOf("fahrzeugbilder")),
     ROUTES("Fahrstraßen, Pendel und Zugrouten", listOf("fahrstrassen.txt")),
     ACTIONS("Aktionen und Brennstoff", listOf("aktionen.txt")),

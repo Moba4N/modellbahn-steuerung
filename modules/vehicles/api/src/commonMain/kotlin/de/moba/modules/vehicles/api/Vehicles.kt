@@ -129,11 +129,42 @@ data class WagonClass(
     }
 }
 
+/** Zuggattung wie in iTrain, z. B. "ICE", "RE" oder "Gag" (Ganzzug); [maxSpeed] in km/h, `null` = ohne Grenze. */
+data class TrainCategory(
+    val id: String,
+    val code: String,
+    val name: String = "",
+    val passenger: Boolean = true,
+    val maxSpeed: Int? = null,
+)
+
+/** Ein Zug: Lok(s) und Wagen (Ids der Wagengattungen, auch mehrfach) mit einer Zuggattung. */
+data class TrainSet(
+    val id: String,
+    val name: String,
+    val categoryId: String = "",
+    val locos: List<String> = emptyList(),
+    val wagons: List<String> = emptyList(),
+)
+
 /** Alle Fahrzeuge der Anlage. */
 data class Fleet(
     val locos: List<LocoRecord> = emptyList(),
     val wagons: List<WagonClass> = emptyList(),
+    val categories: List<TrainCategory> = emptyList(),
+    val trains: List<TrainSet> = emptyList(),
 ) {
+    /** Laenge eines Zugs aus den Laengen seiner Fahrzeuge in mm; fehlende Laengen zaehlen nicht. */
+    fun lengthMm(train: TrainSet): Int =
+        train.locos.sumOf { id -> locos.firstOrNull { it.id == id }?.lengthMm ?: 0 } +
+            train.wagons.sumOf { id -> wagons.firstOrNull { it.id == id }?.lengthMm ?: 0 }
+
+    /** Der Zug, in dem die Lok mit [address] faehrt, sonst `null`. */
+    fun trainOf(address: Int): TrainSet? {
+        val loco = locos.firstOrNull { it.address == address } ?: return null
+        return trains.firstOrNull { loco.id in it.locos }
+    }
+
     fun count(group: VehicleGroup) = when (group) {
         VehicleGroup.LOCOS -> locos.size
         else -> wagons.count { it.group == group }
@@ -176,6 +207,19 @@ interface VehicleService {
 
     /** Eine freie Id fuer einen neuen Eintrag. */
     fun newId(group: VehicleGroup): String
+
+    /** Zuggattung anlegen oder aendern; frei, ohne Grenze. */
+    fun saveCategory(category: TrainCategory): TrainCategory
+
+    /** Loescht die Gattung; Zuege behalten sie nicht. */
+    fun deleteCategory(id: String)
+
+    /** Zug anlegen oder aendern; frei, ohne Grenze. */
+    fun saveTrain(train: TrainSet): TrainSet
+    fun deleteTrain(id: String)
+
+    /** Freie Id fuer eine Gattung ("zg-") oder einen Zug ("zug-"). */
+    fun newObjectId(prefix: String): String
 
     /** Foto eines Fahrzeugs, `null` = keins. */
     fun image(id: String): ByteArray?

@@ -137,6 +137,8 @@ fun MobaShell(
     files: FileSupport? = null,
     /** Weitere Burger-Menues der Module neben "Datei", z. B. "Aktionen". */
     menus: List<ModuleMenu> = emptyList(),
+    /** Objektlisten fuer das Menue "Bearbeiten"; die Schnittstellen sind immer dabei. */
+    editors: List<ModuleEditor> = emptyList(),
 ) {
     SideEffect { ShellUiState.separateWindows.value = separateWindows }
     val dark by app.darkTheme.collectAsState()
@@ -154,6 +156,7 @@ fun MobaShell(
     val activeTools = tools.filter { active(it.moduleId) }
     val activeEffects = effects.filter { active(it.moduleId) }
     val activeMenus = menus.filter { active(it.moduleId) }
+    val activeEditors = (listOf<ModuleEditor>(InterfaceEditor) + editors.filter { active(it.moduleId) }).sortedBy { it.order }
     val openTool by ShellUiState.openTool.collectAsState()
     LaunchedEffect(app) {
         ShellUiState.panelOpen.value = app.preference(PREF_PANEL) == "an"
@@ -185,6 +188,7 @@ fun MobaShell(
                         files = files,
                         fileMenu = { support -> FileMenu(support, compact = !wide, unsaved = unsaved, run = fileGuard::run) },
                         menus = activeMenus,
+                        editors = activeEditors,
                         compact = !wide,
                         panelToggle = wide && activePanels.isNotEmpty(),
                         destinations = listOf(Destination(OVERVIEW, "Übersicht", Icons.Outlined.Dashboard)) +
@@ -282,6 +286,7 @@ fun MobaShell(
                 ToolWindow(app, tool) { ShellUiState.openTool.value = null }
             }
             activeMenus.forEach { menu -> key(menu.moduleId) { menu.Dialogs(app) } }
+            EditWindow(app, activeEditors)
             if (files != null) {
                 FileDialogs(files, unsaved, { visible.flatMap { it.printables(app) } }, fileGuard)
             }
@@ -314,6 +319,7 @@ private fun TopBar(
     files: FileSupport?,
     fileMenu: @Composable (FileSupport) -> Unit,
     menus: List<ModuleMenu>,
+    editors: List<ModuleEditor>,
     compact: Boolean,
     panelToggle: Boolean,
     destinations: List<Destination>,
@@ -335,6 +341,7 @@ private fun TopBar(
         ) {
             // Datei-Menue ganz links wie in Desktop-Programmen
             files?.let { fileMenu(it) }
+            EditMenu(editors, compact)
             menus.forEach { menu -> key(menu.moduleId) { MenuButton(app, menu, compact) } }
             Icon(Icons.Filled.Train, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
             if (!compact) {

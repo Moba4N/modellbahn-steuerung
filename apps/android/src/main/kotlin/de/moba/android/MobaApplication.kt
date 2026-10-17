@@ -7,6 +7,7 @@ import de.moba.modules.decoder.DecoderModule
 import de.moba.modules.decoder.DecoderRepository
 import de.moba.modules.decoder.FileDecoderStore
 import de.moba.modules.driving.DrivingModule
+import de.moba.modules.trackplan.FileLayoutObjectStore
 import de.moba.modules.trackplan.FileTrackPlanStore
 import de.moba.modules.trackplan.TrackPlanModule
 import de.moba.modules.trackplan.TrackPlanRepository
@@ -52,7 +53,7 @@ class MobaApplication : Application() {
 
     /** Die Daten der offenen Anlage; bleiben ueber Neustarts der Module erhalten. */
     private class LayoutData(dir: File) {
-        val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dir, "gleisbilder.txt")))
+        val trackPlans = TrackPlanRepository(FileTrackPlanStore(File(dir, "gleisbilder.txt")), FileLayoutObjectStore(File(dir, "anlagenobjekte.txt")))
         val vehicles = VehicleRepository(FileVehicleStore(File(dir, "fahrzeuge.txt")))
         val symbols = SymbolRepository(FileSymbolStore(File(dir, "symbole.txt")))
         val decoders = DecoderRepository(FileDecoderStore(File(dir, "decoder.txt")))

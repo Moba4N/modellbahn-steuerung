@@ -15,6 +15,10 @@ import de.moba.modules.trackplan.api.TRACKPLAN_MODULE_ID
 import de.moba.modules.trackplan.api.TileKind
 import de.moba.modules.trackplan.api.TrackPlan
 import de.moba.modules.trackplan.api.TrackPlanService
+import de.moba.modules.trackplan.api.BoosterDef
+import de.moba.modules.trackplan.api.StationDef
+import de.moba.modules.trackplan.api.LayoutObjectStore
+import de.moba.modules.trackplan.api.LayoutObjects
 import de.moba.modules.trackplan.api.TrackPlanStore
 import de.moba.modules.trackplan.api.TrackShape
 import de.moba.modules.trackplan.api.TrackTile
@@ -45,12 +49,21 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 
 /**
  * Haelt die Gleisbilder ueber Zentralenwechsel hinweg. Die App erzeugt ihn einmal und reicht ihn
  * jedem neu gestarteten [TrackPlanModule] mit. Ohne gespeicherte Plaene startet er mit der Beispielanlage.
  */
-class TrackPlanRepository(private val store: TrackPlanStore?) {
+class TrackPlanRepository(private val store: TrackPlanStore?, private val objectStore: LayoutObjectStore? = null) {
+    /** Bahnhoefe und Booster; jede Aenderung wird sofort gespeichert. */
+    internal val objects = MutableStateFlow(runCatching { objectStore?.load() }.getOrNull() ?: LayoutObjects())
+
+    internal fun changeObjects(transform: (LayoutObjects) -> LayoutObjects) {
+        val next = objects.updateAndGet(transform)
+        runCatching { objectStore?.save(next) }
+    }
+
     internal val plans = MutableStateFlow(
         runCatching { store?.load() }.getOrNull()?.takeIf { it.isNotEmpty() } ?: listOf(DemoPlans.layout()),
     )
@@ -494,5 +507,35 @@ internal class TrackPlanServiceImpl(
             }
             if (switchOn || switchOff) scope.launch { setOn(t, switchOn) }
         }
+    }
+
+    override val objects: StateFlow<LayoutObjects> = repository.objects
+
+    override fun saveStation(station: StationDef) {
+        require(station.name.isNotBlank()) { "Bitte einen Namen eingeben." }
+        repository.changeObjects { o ->
+            o.copy(stations = if (o.stations.any { it.id == station.id }) o.stations.map { if (it.id == station.id) station else it } else o.stations + station)
+        }
+    }
+
+    override fun deleteStation(id: String) = repository.changeObjects { o -> o.copy(stations = o.stations.filterNot { it.id == id }) }
+
+    override fun saveBooster(booster: BoosterDef) {
+        require(booster.name.isNotBlank()) { "Bitte einen Namen eingeben." }
+        repository.changeObjects { o ->
+            o.copy(boosters = if (o.boosters.any { it.id == booster.id }) o.boosters.map { if (it.id == booster.id) booster else it } else o.boosters + booster)
+        }
+    }
+
+    override fun deleteBooster(id: String) = repository.changeObjects { o -> o.copy(boosters = o.boosters.filterNot { it.id == id }) }
+
+    override fun newObjectId(prefix: String): String {
+        val used = objects.value.stations.map { it.id } + objects.value.boosters.map { it.id }
+        return generateSequence(1) { it + 1 }.map { "$prefix$it" }.first { it !in used }
+    }
+
+    override suspend fun setBooster(id: String, on: Boolean) {
+        val b = objects.value.boosters.firstOrNull { it.id == id } ?: return
+        setTurnout(b.address ?: throw IllegalStateException("${b.name} hat keine Schaltadresse."), !on)
     }
 }

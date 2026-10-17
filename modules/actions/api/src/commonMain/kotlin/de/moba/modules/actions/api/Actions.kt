@@ -81,8 +81,14 @@ enum class ConditionType(val label: String, val params: List<ParamSpec>) {
     /** Die Adresse gehoert zu einer gestellten Fahrstrasse. */
     ACCESSORY_RESERVED("Zubehör-Reservierung", listOf(ParamSpec("adresse", "Adresse", ParamKind.NUMBER))),
 
-    /** Gleisspannung (Booster) an oder aus. */
-    BOOSTER("Booster", listOf(choice("zustand", "Gleisspannung", "an" to "an", "aus" to "aus"))),
+    /** Gleisspannung an oder aus; mit Booster-Name zusaetzlich dessen Zustand (Bearbeiten > Booster). */
+    BOOSTER(
+        "Booster",
+        listOf(
+            choice("zustand", "Zustand", "an" to "an", "aus" to "aus"),
+            ParamSpec("booster", "Booster (leer = Gleisspannung)", ParamKind.TEXT, optional = true),
+        ),
+    ),
 
     /** Nicht belegt, nicht reserviert und kein Zug darin. */
     BLOCK_FREE("Block frei", listOf(BLOCK_PARAM)),
@@ -122,7 +128,7 @@ enum class ConditionType(val label: String, val params: List<ParamSpec>) {
         ),
     ),
 
-    /** Der Zug im Block fuehrt einen Wagen dieser Bauart mit ("Wagen im Zug" bei der Lok). */
+    /** Der Zug im Block fuehrt einen Wagen dieser Bauart mit ("Wagen im Zug" bei der Lok oder Bearbeiten > Züge). */
     WAGON(
         "Wagen",
         listOf(BLOCK_PARAM, ParamSpec("bauart", "Bauart", ParamKind.CHOICE, WagonCategory.OPEN.name, WagonCategory.entries.map { it.name to "${it.label} (${it.code})" })),

@@ -327,6 +327,21 @@ Das zweite Burger-Menue links oben ("Datei") arbeitet wie das Datei-Menue in iTr
 - **Drucken**: jedes Gleisbild sowie Lok- und Wagenliste mit Vorschau; Windows ueber den Druckerdialog
   (auch "Microsoft Print to PDF"), Android ueber den Druckdienst des Systems.
 
+## Menue "Bearbeiten"
+
+Das Burger-Menue "Bearbeiten" (oben links, neben "Datei") oeffnet wie in iTrain jede Objektliste direkt, ohne in
+das Gleisbild oder den passenden Reiter zu wechseln: Schnittstellen, Lokomotiven, Wagen, Zuggattungen, Zuege,
+Zugrouten, Rueckmelder, Zubehoer, Fahrwege, Aktionen, Bloecke, Bahnhoefe und Booster. Links stehen alle Listen,
+daneben die Eintraege und das Formular.
+
+- **Zuggattungen** (z. B. RE, IC, Gag) mit Personen-/Gueterzug und Hoechstgeschwindigkeit, **Zuege** aus Lok(s)
+  und Wagen mit Gattung und errechneter Laenge; eine Lok faehrt immer nur in einem Zug. Beides steht in `fahrzeuge.txt`.
+- **Rueckmelder, Zubehoer und Bloecke** zeigen alle Kacheln aller Gleisbilder mit Zustand und denselben Feldern wie
+  im Gleisbild-Editor; bei Bloecken zusaetzlich Zug setzen/entfernen, Reservierung aufheben, Bahnhof und Booster.
+- **Bahnhoefe** fassen Bloecke unter Namen und Kuerzel zusammen, **Booster** haben eine Schaltadresse, einen
+  Zustandsmelder (Kurzschluss) und versorgte Bloecke. Beides steht in `anlagenobjekte.txt`, ist kostenlos und wird
+  sofort gespeichert. Die Bedingung "Booster" in Aktionen prueft mit Booster-Name auch dessen Zustand.
+
 ## Aktionen
 
 Das dritte Burger-Menue oben links ("Aktionen", neben "Datei") arbeitet wie die Aktionen in iTrain: Eine Aktion hat

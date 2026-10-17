@@ -600,7 +600,7 @@ private fun FormButtons(isNew: Boolean, onSave: () -> Any, onDelete: () -> Unit,
 }
 
 @Composable
-private fun TextInput(
+internal fun TextInput(
     label: String,
     value: String,
     modifier: Modifier = Modifier.fillMaxWidth(),
@@ -618,7 +618,7 @@ private fun TextInput(
 }
 
 @Composable
-private fun NumberInput(label: String, value: String, modifier: Modifier, enabled: Boolean = true, onChange: (String) -> Unit) {
+internal fun NumberInput(label: String, value: String, modifier: Modifier, enabled: Boolean = true, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { onChange(it.filter(Char::isDigit).take(5)) },
@@ -645,7 +645,7 @@ private fun DecimalInput(label: String, value: String, modifier: Modifier, enabl
 }
 
 @Composable
-private fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
@@ -682,7 +682,7 @@ private fun ConsistPicker(service: VehicleService, selected: List<String>, onCha
 
 /** Auswahlfeld mit Menue; mit [optional] gibt es einen Eintrag "keine Angabe". */
 @Composable
-private fun <T> Choice(
+internal fun <T> Choice(
     label: String,
     options: List<T>,
     selected: T?,

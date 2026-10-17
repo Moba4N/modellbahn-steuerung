@@ -131,6 +131,20 @@ interface TrackPlanService {
 
     fun startClock()
     fun stopClock()
+
+    /** Bahnhoefe und Booster; kostenlos, jede Aenderung wird sofort gespeichert. */
+    val objects: StateFlow<LayoutObjects>
+
+    fun saveStation(station: StationDef)
+    fun deleteStation(id: String)
+    fun saveBooster(booster: BoosterDef)
+    fun deleteBooster(id: String)
+
+    /** Freie Id mit [prefix], z. B. "bf-" oder "bo-". */
+    fun newObjectId(prefix: String): String
+
+    /** Schaltet einen Booster ueber seine Adresse. @throws IllegalStateException ohne Schaltadresse */
+    suspend fun setBooster(id: String, on: Boolean)
 }
 
 fun measureKey(planId: String, tile: TrackTile) = "$planId/${tile.x},${tile.y}"
