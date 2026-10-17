@@ -2,6 +2,8 @@ package de.moba.desktop
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -82,6 +84,7 @@ class BlocksUiTest {
         TrackPlanUiState.mode.value = TrackPlanMode.BETRIEB
         TrackPlanUiState.tileSize.value = 24
         TrackPlanUiState.message.value = null
+        TrackPlanUiState.contextMenu.value = null
     }
 
     @Test
@@ -91,7 +94,8 @@ class BlocksUiTest {
         val view = onNodeWithTag(PLAN_VIEW_TAG + "bloecke")
         view.performTouchInput { longClick(Offset(2.5f * 24.dp.toPx(), 1.5f * 24.dp.toPx())) }
         onNodeWithText("Zug einsetzen").assertExists()
-        onNodeWithText("V 100").performClick()
+        // "V 100" steht auch in der Zugleiste; anklickbar ist nur der Menueeintrag
+        onNode(hasText("V 100") and hasClickAction()).performClick()
         waitForIdle()
         assertEquals(mapOf((1 to 1) to 7), app.plans().trains.value)
 
